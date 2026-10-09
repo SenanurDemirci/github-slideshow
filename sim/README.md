@@ -1,0 +1,30 @@
+# LEO / GEO NTN Doppler & Kapsama Simülatörü
+
+`leo_geo_doppler.py` — Python sürümü (numpy + matplotlib).
+
+## Kurulum
+
+```
+pip install numpy matplotlib pillow
+```
+
+## Çalıştırma
+
+```
+python leo_geo_doppler.py                         # etkileşimli pencere (kaydırıcılar + butonlar)
+python leo_geo_doppler.py --layer GEO --fc 20     # GEO, Ka-band 20 GHz ile başla
+python leo_geo_doppler.py --save sim.gif --frames 120   # animasyonu GIF olarak kaydet
+python leo_geo_doppler.py --png ekran.png --t 600       # t = 600 s anındaki tek kare
+```
+
+Pencerede: LEO irtifası, düzlemdeki uydu sayısı, minimum elevasyon, GEO konumu,
+simülasyon hızı, LEO/GEO servis katmanı ve taşıyıcı frekansı değiştirilebilir.
+
+## Neyi değiştirmek isterseniz
+
+- Kullanıcılar (hız, irtifa, başlangıç yeri): dosyanın başındaki `UES` listesi
+- Varsayılan parametreler: `Sim.__init__`
+- Doppler / yol kaybı formülleri: `link()` fonksiyonu
+- Handover kuralı: `Sim.eval_serving()`
+
+`leo-geo-doppler.html` aynı simülasyonun tarayıcı sürümüdür (isteğe bağlı).
