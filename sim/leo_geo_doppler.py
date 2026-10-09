@@ -298,10 +298,13 @@ class App:
         ax.fill_between(X(phis), Y(phis, 0), -1, color=COL_EARTH, lw=0)
         ax.plot(X(phis), Y(phis, 0), color="0.25", lw=1.2)
         ax.text(X(-VW) + 40, -0.62, f"Earth surface · R_E = {RE:.0f} km", fontsize=8, color="0.45")
+        geo_only = s.layer == "GEO"   # GEO seçilince LEO hiç çizilmez
+        ref = s.ground_state(0.0)
         # LEO yörüngesi
-        ax.plot(X(phis), Y(phis, s.h_leo), "--", color="0.6", lw=0.9)
-        ax.text(X(-VW) + 40, Y(-VW, s.h_leo) - 0.17,
-                f"LEO orbit · h = {s.h_leo:.0f} km · v = {s.r_leo * s.omega:.2f} km/s →", fontsize=8, color="0.45")
+        if not geo_only:
+            ax.plot(X(phis), Y(phis, s.h_leo), "--", color="0.6", lw=0.9)
+            ax.text(X(-VW) + 40, Y(-VW, s.h_leo) - 0.17,
+                    f"LEO orbit · h = {s.h_leo:.0f} km · v = {s.r_leo * s.omega:.2f} km/s →", fontsize=8, color="0.45")
 
         # zemin Doppler şeridi (yerde sabit terminal, en iyi LEO uydusu)
         fref = s.fc * 1e9 * s.omega * RE / C
@@ -324,8 +327,7 @@ class App:
 
         # LEO uyduları: kapsama alanı, yörünge izi, ISL, etiket
         lam = footprint(s.r_leo, s.el_min)
-        ref = s.ground_state(0.0)
-        vis = sorted([k for k in range(s.n_sat) if abs(s.sat_theta(k, t)) < VW * 1.1], key=lambda k: s.sat_theta(k, t))
+        vis = [] if geo_only else sorted([k for k in range(s.n_sat) if abs(s.sat_theta(k, t)) < VW * 1.1], key=lambda k: s.sat_theta(k, t))
         for a, b in zip(vis[:-1], vis[1:]):
             ta, tb = s.sat_theta(a, t), s.sat_theta(b, t)
             if tb - ta < 4 * np.pi / s.n_sat:
@@ -373,7 +375,7 @@ class App:
             ax.annotate("", (X(pf), Y(pf, u["h"])), (ux, uy),
                         arrowprops=dict(arrowstyle="->", color=c, ls="--", lw=1.2))
             # bağlantılar
-            if s.srv[i] >= 0:
+            if s.srv[i] >= 0 and not geo_only:
                 th = s.sat_theta(s.srv[i], t)
                 prim = s.layer == "LEO"
                 ax.plot([ux, X(th)], [uy, Y(th, s.h_leo)], "-" if prim else "--", color=c,
@@ -384,6 +386,8 @@ class App:
             if cu["geo"]["el"] >= s.el_min:
                 prim = s.layer == "GEO"
                 ax.plot([ux, gx], [uy, gy], "-" if prim else "--", color=c, lw=1.4 if prim else 0.8, alpha=1 if prim else 0.3)
+                if prim:
+                    ax.text(ux + (gx - ux) * 0.35, uy + (gy - uy) * 0.35, f" d={cu['geo']['d']:.0f} km", fontsize=7, color=c)
             if u["h"] > 0.1:
                 ax.plot([ux, ux], [uy, Y(phi, 0)], color=c, lw=0.8, alpha=0.4)
             ax.plot(ux, uy, marker=">" if u["v"] >= 0 else "<", ms=10, color=c, mec="k", mew=0.6)
@@ -402,7 +406,8 @@ class App:
         srvs = ", ".join(sat_name(k) for k in sorted(serving)) or "none"
         ax.set_title(f"LOCAL LINK VIEW  ·  t = {fmt_t(t)}  ·  {s.speed:.0f}×  ·  layer {s.layer}  ·  "
                      f"{'serving: ' + srvs if s.layer == 'LEO' else 'GEO @ %+.0f°' % s.geo_lon}  ·  "
-                     f"f_c {s.fc:g} GHz  ·  HO events: {len(s.events)}", fontsize=10, loc="left")
+                     f"f_c {s.fc:g} GHz" + ("" if geo_only else f"  ·  HO events: {len(s.events)}"),
+                     fontsize=10, loc="left")
 
     # --- yörünge görünümü (gerçek ölçek)
     def draw_orbit(self, cur):
@@ -415,7 +420,9 @@ class App:
         full = np.linspace(0, 2 * np.pi, 361)
         ax.fill(*pol(full, RE), color=COL_EARTH, ec="0.25", lw=1)
         ax.plot(*arc(-VW, VW, RE), color="k", lw=4)                 # yerel görünüm penceresi
-        ax.plot(*pol(full, s.r_leo), "--", color="0.6", lw=0.8)
+        geo_only = s.layer == "GEO"
+        if not geo_only:
+            ax.plot(*pol(full, s.r_leo), "--", color="0.6", lw=0.8)
         ax.plot(*pol(full, RGEO), "--", color="0.6", lw=0.8)
         # GEO kapsama konisi
         g = s.geo_state()
@@ -428,7 +435,7 @@ class App:
         ax.text(*pol(g["th"], RGEO * 1.07), "GEO", color=gcol, fontsize=8, ha="center", clip_on=True)
         # LEO uyduları
         lam = footprint(s.r_leo, s.el_min)
-        for k in range(s.n_sat):
+        for k in ([] if geo_only else range(s.n_sat)):
             th = s.sat_theta(k, t)
             st, _ = self.sat_status(k, serving)
             c = COL_SERVE if st == "serve" else SAT_PAL[k % len(SAT_PAL)]
@@ -448,13 +455,21 @@ class App:
             if s.layer == "GEO" and cu["geo"]["el"] >= s.el_min:
                 ax.plot([p[0], g["p"][0]], [p[1], g["p"][1]], color=u["color"], lw=0.6, alpha=0.6)
             ax.plot(*p, "o", color=u["color"], ms=3)
-        R = s.r_leo * 1.25
-        ax.set_xlim(-R, R)
-        ax.set_ylim(-R * 0.55, R * 1.05)
+        if geo_only:
+            R = RGEO * 1.12
+            ax.set_xlim(-R, R)
+            ax.set_ylim(-R * 0.75, R * 1.08)
+            title = (f"ORBIT VIEW · to scale (GEO)\nGEO h = 35 786 km · footprint @ {s.el_min:.0f}°: "
+                     f"±{lg / D:.1f}° ({lg * RE:.0f} km)")
+        else:
+            R = s.r_leo * 1.25
+            ax.set_xlim(-R, R)
+            ax.set_ylim(-R * 0.55, R * 1.05)
+            title = (f"ORBIT VIEW · to scale (LEO zoom)\nfootprint @ {s.el_min:.0f}°: LEO ±{lam / D:.1f}° "
+                     f"({lam * RE:.0f} km) · GEO ±{lg / D:.1f}°")
         ax.set_aspect("equal")
         ax.set_xticks([]), ax.set_yticks([])
-        ax.set_title(f"ORBIT VIEW · to scale (LEO zoom)\nfootprint @ {s.el_min:.0f}°: LEO ±{lam / D:.1f}° "
-                     f"({lam * RE:.0f} km) · GEO ±{lg / D:.1f}°", fontsize=9, loc="left")
+        ax.set_title(title, fontsize=9, loc="left")
 
     # --- Doppler grafiği ve kapsama zaman çizelgesi
     def draw_doppler(self):
@@ -468,7 +483,7 @@ class App:
         fdG = np.array([[r[2] for r in h[1]] for h in s.hist])
         for i, u in enumerate(UES):
             prim_geo = s.layer == "GEO"
-            ax.plot(tt / 60, fdG[:, i] / 1e3, "--", color=u["color"], lw=1.6 if prim_geo else 1, alpha=1 if prim_geo else 0.35)
+            ax.plot(tt / 60, fdG[:, i] / 1e3, "-" if prim_geo else "--", color=u["color"], lw=1.6 if prim_geo else 1, alpha=1 if prim_geo else 0.35)
             if s.layer == "LEO":
                 y = fdL[:, i].copy()
                 y[1:][np.diff(srv[:, i]) != 0] = np.nan                # handover anında çizgiyi kopar
@@ -480,7 +495,7 @@ class App:
         ax.set_ylabel("f_d [kHz]", fontsize=8)
         ax.tick_params(labelsize=8, labelbottom=False)
         ax.grid(alpha=0.3)
-        ax.legend(fontsize=7, ncol=4, loc="upper left", title="— LEO serving   - - GEO", title_fontsize=7)
+        ax.legend(fontsize=7, ncol=4, loc="upper left", title="— GEO (UE motion only)" if s.layer == "GEO" else "— LEO serving   - - GEO", title_fontsize=7)
         ax.set_title("DOPPLER f_d(t) · last 30 min", fontsize=9, loc="left")
         # kapsama zaman çizelgesi: renk = servis eden uydu, siyah çizgi = handover
         rgb = np.zeros((len(UES), len(tt), 3))
@@ -544,9 +559,11 @@ class App:
         # takımyıldız
         serving = {k for k in s.srv if k >= 0}
         ref = s.ground_state(0.0)
-        ks = sorted([k for k in range(s.n_sat) if abs(s.sat_theta(k, s.t)) < VW * 1.6], key=lambda k: -s.sat_theta(k, s.t))
+        geo_only = s.layer == "GEO"
+        ks = [] if geo_only else sorted([k for k in range(s.n_sat) if abs(s.sat_theta(k, s.t)) < VW * 1.6],
+                                        key=lambda k: -s.sat_theta(k, s.t))
         y = 0.50
-        ax.text(0, y, "CONSTELLATION", fontsize=10, fontweight="bold", transform=ax.transAxes)
+        ax.text(0, y, "SATELLITE" if geo_only else "CONSTELLATION", fontsize=10, fontweight="bold", transform=ax.transAxes)
         y -= 0.03
         for k in ks:
             st, c = self.sat_status(k, serving)
@@ -560,9 +577,13 @@ class App:
                       f"{'serving' if s.layer == 'GEO' else 'standby'}", fontsize=8, family="monospace", color=gc,
                 transform=ax.transAxes)
         y -= 0.03
-        ax.text(0, y, f"LEO h={s.h_leo:.0f} km · v={s.r_leo * s.omega:.2f} km/s · T={2 * np.pi / s.omega / 60:.1f} min · "
-                      f"{s.n_sat}/plane\nf_c={s.fc:g} GHz · max |f_d| ≈ {fmt_hz(s.fc * 1e9 * s.omega * RE / C)[1:]}",
-                fontsize=8, color="0.4", transform=ax.transAxes, va="top")
+        if geo_only:
+            info = (f"GEO h=35 786 km · fixed relative to Earth (T = 23 h 56 min)\n"
+                    f"f_c={s.fc:g} GHz · sub-satellite offset {s.geo_lon:+.0f}°")
+        else:
+            info = (f"LEO h={s.h_leo:.0f} km · v={s.r_leo * s.omega:.2f} km/s · T={2 * np.pi / s.omega / 60:.1f} min · "
+                    f"{s.n_sat}/plane\nf_c={s.fc:g} GHz · max |f_d| ≈ {fmt_hz(s.fc * 1e9 * s.omega * RE / C)[1:]}")
+        ax.text(0, y, info, fontsize=8, color="0.4", transform=ax.transAxes, va="top")
 
         # bağlantı durumu + handover kaydı
         y -= 0.07
@@ -581,9 +602,13 @@ class App:
                     fontsize=8, transform=ax.transAxes, va="top")
             y -= 0.044
         rl = [c["leo"]["rtt"] for c in cur if c["leo"]]
-        ax.text(0, y, f"Mean access RTT: LEO {np.mean(rl) if rl else 0:.1f} ms · GEO {np.mean([c['geo']['rtt'] for c in cur]):.1f} ms",
+        rg = np.mean([c["geo"]["rtt"] for c in cur])
+        ax.text(0, y, f"Mean access RTT: GEO {rg:.1f} ms" if geo_only else
+                f"Mean access RTT: LEO {np.mean(rl) if rl else 0:.1f} ms · GEO {rg:.1f} ms",
                 fontsize=8, color="0.4", transform=ax.transAxes)
         y -= 0.03
+        if geo_only:
+            return
         ev = s.events[:6]
         ax.text(0, y, "\n".join(f"{fmt_t(e[0])} · {e[1]:<4} {sat_name(e[2])} → {sat_name(e[3])}" for e in ev)
                 or "no handover events yet", fontsize=8, family="monospace", va="top", transform=ax.transAxes)
