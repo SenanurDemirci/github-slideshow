@@ -1,0 +1,598 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>LEO–GEO Doppler Simulator</title>
+<style>
+:root{
+  --bg:#f4f2ee; --panel:#ffffff; --ink:#1d1d1b; --muted:#6b6862; --line:#d9d5cc; --grid:#ebe7df;
+  --sky:#fbfaf7; --earth:#efe9dc; --earthEdge:#3a3a36; --orbit:#9a958b; --band:rgba(120,140,170,.07);
+  --serve:#a8761d; --rise:#4f9a5a; --set:#c0504d; --idle:#8e8a82;
+  --ue-uav:#1f8a68; --ue-ac:#2f6fb5; --ue-hst:#d0712b; --ue-ship:#7b55b0;
+  --dneg:#2f6fb5; --dmid:#f1eee7; --dpos:#c0504d; --nocov:#d3cec4;
+  --btn:#f4f2ee;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#141413; --panel:#1e1e1c; --ink:#ece9e2; --muted:#a19d94; --line:#3a3935; --grid:#2a2926;
+    --sky:#181817; --earth:#2a2722; --earthEdge:#c9c3b6; --orbit:#7d786f; --band:rgba(140,170,220,.07);
+    --serve:#e0a640; --rise:#6cc07a; --set:#e0716d; --idle:#8e8a82;
+    --ue-uav:#3fc79a; --ue-ac:#6aa5ea; --ue-hst:#f0924a; --ue-ship:#a989db;
+    --dneg:#4f8fda; --dmid:#2b2a27; --dpos:#e0605b; --nocov:#3a3834;
+    --btn:#262624;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#141413; --panel:#1e1e1c; --ink:#ece9e2; --muted:#a19d94; --line:#3a3935; --grid:#2a2926;
+  --sky:#181817; --earth:#2a2722; --earthEdge:#c9c3b6; --orbit:#7d786f; --band:rgba(140,170,220,.07);
+  --serve:#e0a640; --rise:#6cc07a; --set:#e0716d; --idle:#8e8a82;
+  --ue-uav:#3fc79a; --ue-ac:#6aa5ea; --ue-hst:#f0924a; --ue-ship:#a989db;
+  --dneg:#4f8fda; --dmid:#2b2a27; --dpos:#e0605b; --nocov:#3a3834;
+  --btn:#262624;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font:14px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;padding:16px}
+.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+h1{font-size:18px;margin:0 0 2px;font-weight:600;letter-spacing:.2px}
+.sub{color:var(--muted);font-size:13px;margin-bottom:12px}
+.controls{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center;background:var(--panel);border:1px solid var(--line);padding:10px 12px;margin-bottom:12px}
+.controls label{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
+.controls output{color:var(--ink);min-width:52px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px}
+.controls input[type=range]{width:110px}
+button,select{font:inherit;font-size:12px;background:var(--btn);color:var(--ink);border:1px solid var(--line);padding:4px 10px;cursor:pointer}
+button.on{border-color:var(--serve);color:var(--serve);font-weight:600}
+.seg{display:inline-flex}.seg button+button{border-left:none}
+.grid{display:grid;grid-template-columns:minmax(0,1fr) 400px;gap:12px;align-items:start}
+.row2{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.25fr);gap:12px;margin-top:12px}
+.card{background:var(--panel);border:1px solid var(--line)}
+.card-h{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid var(--line);font-size:12px;letter-spacing:1.4px;color:var(--muted);text-transform:uppercase}
+canvas{display:block;width:100%}
+.status{border-top:1px solid var(--line);padding:6px 12px;font-size:12px;text-align:center}
+.cap{display:flex;flex-wrap:wrap;justify-content:space-between;gap:6px 20px;color:var(--muted);font-size:12px;padding:6px 2px 0}
+aside .card+.card{margin-top:12px}
+table{border-collapse:collapse;width:100%;font-size:12.5px}
+th,td{border-bottom:1px solid var(--line);padding:5px 8px;text-align:left;white-space:nowrap}
+th{font-weight:600}
+td:first-child,th:first-child{color:var(--muted);font-weight:400}
+.tbl{overflow-x:auto}
+.list{padding:8px 12px;font-size:12.5px}
+.list div{padding:1px 0}
+.serve{color:var(--serve);font-weight:600}.rise{color:var(--rise)}.set{color:var(--set)}.dim{color:var(--muted)}
+.ok{color:var(--rise)}.bad{color:var(--set)}
+.legend{display:flex;flex-wrap:wrap;gap:4px 12px;padding:6px 12px;border-top:1px solid var(--line);font-size:11.5px;color:var(--muted)}
+.sw{display:inline-block;width:14px;height:3px;vertical-align:middle;margin-right:4px}
+.sw.d{background:none;border-top:2px dashed}
+.cbar{display:inline-block;width:90px;height:8px;vertical-align:middle;margin:0 4px;background:linear-gradient(90deg,var(--dneg),var(--dmid),var(--dpos));border:1px solid var(--line)}
+@media (max-width:1100px){.grid{grid-template-columns:minmax(0,1fr)}}
+@media (max-width:760px){.row2{grid-template-columns:minmax(0,1fr)}.controls input[type=range]{width:90px}}
+</style>
+</head>
+<body>
+<h1>LEO / GEO NTN Link Simulator — trajectories, Doppler &amp; coverage</h1>
+<div class="sub">Moving UEs (UAV, aircraft, high-speed train, ship) served by a LEO constellation plane or a GEO satellite. Live per-UE elevation, slant range, Doppler shift, Doppler rate, path loss, delay and handovers.</div>
+
+<div class="controls">
+  <button id="play" class="on">❚❚ Pause</button>
+  <button id="reset">↺ Reset</button>
+  <label>Speed <select id="speed"><option value="1">1×</option><option value="10">10×</option><option value="30" selected>30×</option><option value="60">60×</option><option value="120">120×</option></select></label>
+  <label>Serving layer <span class="seg"><button id="lyLEO" class="on">LEO</button><button id="lyGEO">GEO</button></span></label>
+  <label>Carrier <select id="fc">
+    <option value="1.6">L-band 1.6 GHz</option>
+    <option value="2" selected>S-band 2 GHz (NR n256)</option>
+    <option value="12">Ku 12 GHz</option>
+    <option value="20">Ka 20 GHz (DL)</option>
+    <option value="30">Ka 30 GHz (UL)</option></select></label>
+  <label>LEO alt <input id="hLeo" type="range" min="400" max="1500" step="10" value="600"><output id="hLeoO"></output></label>
+  <label>Sats/plane <input id="nSat" type="range" min="6" max="24" step="1" value="12"><output id="nSatO"></output></label>
+  <label>Min elev <input id="elMin" type="range" min="0" max="40" step="1" value="10"><output id="elMinO"></output></label>
+  <label>GEO offset <input id="geoLon" type="range" min="-70" max="70" step="1" value="35"><output id="geoLonO"></output></label>
+</div>
+
+<div class="grid">
+  <section>
+    <div class="card">
+      <div class="card-h"><span>Local link view · side projection</span><span class="mono" id="clock"></span></div>
+      <canvas id="local"></canvas>
+      <div class="status mono" id="status"></div>
+      <div class="legend">
+        <span>Ground strip: Doppler seen by a static ground terminal from best LEO sat</span>
+        <span>−<span class="cbar"></span>+</span>
+        <span><span class="sw" style="background:var(--nocov)"></span>no coverage</span>
+        <span><span class="sw" style="background:var(--serve)"></span>serving</span>
+        <span><span class="sw" style="background:var(--rise)"></span>rising</span>
+        <span><span class="sw" style="background:var(--set)"></span>setting</span>
+      </div>
+    </div>
+    <div class="cap"><span>Altitude axis is logarithmic · horizontal axis = ground track (±20° ≈ ±2 220 km) · GEO is off-scale above</span><span>Angles, ranges, Doppler computed in true geometry</span></div>
+    <div class="row2">
+      <div class="card">
+        <div class="card-h"><span>Orbit view · to scale</span><button id="zoom">Zoom: LEO</button></div>
+        <canvas id="orbit"></canvas>
+      </div>
+      <div class="card">
+        <div class="card-h"><span>Doppler f_d(t) · coverage timeline</span><span class="mono" id="win">last 30 min</span></div>
+        <canvas id="chart"></canvas>
+        <div class="legend" id="chartLegend"></div>
+      </div>
+    </div>
+  </section>
+
+  <aside>
+    <div class="card"><div class="card-h"><span>Per-UE link values</span><span class="mono" id="lyTag">LEO</span></div><div class="tbl" id="ueTable"></div></div>
+    <div class="card"><div class="card-h"><span>Constellation</span></div><div class="list mono" id="const"></div></div>
+    <div class="card"><div class="card-h"><span>Link state</span></div><div class="list" id="state"></div></div>
+  </aside>
+</div>
+
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+const C = 299792.458, MU = 398600.4418, RE = 6371, RGEO = 42164.17, D = Math.PI / 180;
+const VW = 20 * D;          // half-span of local view (central angle)
+const HYST = 8;             // handover hysteresis [deg]
+const SAMPLE = 2;           // history sample step [s]
+const WINDOW = 1800;        // chart window [s]
+const TH0 = -6 * D;         // initial phase of SAT-1
+
+const P = { fc: 2, hLeo: 600, nSat: 12, elMin: 10, geoLon: 35, layer: 'LEO', speed: 30, playing: true, zoomGeo: false };
+
+const UES = [
+  { id: 'UAV',  name: 'UAV',       h: 0.3, v: -200, phi0:  4.5 * D, icon: 'uav',   col: '--ue-uav' },
+  { id: 'A/C',  name: 'Aircraft',  h: 11,  v:  900, phi0: -2.0 * D, icon: 'plane', col: '--ue-ac' },
+  { id: 'HST',  name: 'HST train', h: 0,   v:  400, phi0: -9.0 * D, icon: 'train', col: '--ue-hst' },
+  { id: 'SHIP', name: 'Ship',      h: 0,   v:   40, phi0: 12.0 * D, icon: 'ship',  col: '--ue-ship' },
+];
+const SAT_PAL = ['#c9952c', '#4f9a5a', '#c0504d', '#2f6fb5', '#7b55b0', '#1f8a8a'];
+
+/* ---------------- physics ---------------- */
+const wrapV = a => { const w = 2 * VW; return ((a + VW) % w + w) % w - VW; };
+const uePhiRaw = (u, t) => u.phi0 + (u.v / 3600) / (RE + u.h) * t;
+function ueState(u, t) {
+  const phi = wrapV(uePhiRaw(u, t)), r = RE + u.h, vs = u.v / 3600;
+  return { phi, p: [r * Math.sin(phi), r * Math.cos(phi)], v: [vs * Math.cos(phi), -vs * Math.sin(phi)] };
+}
+const rLeo = () => RE + P.hLeo;
+const omega = () => Math.sqrt(MU / rLeo() ** 3);
+function satTheta(k, t) { const a = TH0 + 2 * Math.PI * k / P.nSat + omega() * t; return Math.atan2(Math.sin(a), Math.cos(a)); }
+function satState(k, t) {
+  const th = satTheta(k, t), r = rLeo(), w = omega();
+  return { th, p: [r * Math.sin(th), r * Math.cos(th)], v: [r * w * Math.cos(th), -r * w * Math.sin(th)] };
+}
+function geoState() { const th = P.geoLon * D; return { th, p: [RGEO * Math.sin(th), RGEO * Math.cos(th)], v: [0, 0] }; }
+function groundState(phi) { return { phi, p: [RE * Math.sin(phi), RE * Math.cos(phi)], v: [0, 0] }; }
+function link(ue, s) {
+  const dx = s.p[0] - ue.p[0], dy = s.p[1] - ue.p[1], d = Math.hypot(dx, dy);
+  const rn = Math.hypot(ue.p[0], ue.p[1]);
+  const el = Math.asin(Math.max(-1, Math.min(1, (dx * ue.p[0] + dy * ue.p[1]) / (d * rn)))) / D;
+  const rr = (dx * (s.v[0] - ue.v[0]) + dy * (s.v[1] - ue.v[1])) / d;   // range rate km/s
+  const fd = -P.fc * 1e9 * rr / C;                                       // Hz
+  const pl = 20 * Math.log10(d) + 20 * Math.log10(P.fc) + 92.45;          // FSPL dB
+  const ow = d / C * 1000;
+  return { d, el, rr, fd, pl, ow, rtt: 2 * ow };
+}
+// Earth central angle of the coverage edge for elevation el
+const footprint = (r, el) => Math.acos(RE * Math.cos(el * D) / r) - el * D;
+
+/* ---------------- simulation state ---------------- */
+let t = 0, nextSample = 0, hist = [], events = [];
+
+function evalServing(u, tt, log) {
+  const us = ueState(u, tt), L = [];
+  let best = -1, bel = -99;
+  for (let k = 0; k < P.nSat; k++) {
+    const l = link(us, satState(k, tt)); L.push(l);
+    if (l.el >= P.elMin && l.el > bel) { bel = l.el; best = k; }
+  }
+  let cur = u.srv;
+  if (cur >= 0 && cur < P.nSat && L[cur].el >= P.elMin) {
+    if (best !== cur && bel - L[cur].el > HYST && L[cur].rr > 0) cur = best;
+  } else cur = best;
+  if (cur !== u.srv) {
+    if (log && u.srvInit) { events.unshift({ t: tt, ue: u.id, from: u.srv, to: cur }); events.length = Math.min(events.length, 40); }
+    u.srv = cur;
+  }
+  u.srvInit = true;
+  return { us, L };
+}
+function sample(tt, log) {
+  const g = geoState();
+  hist.push({ t: tt, v: UES.map(u => {
+    const { us, L } = evalServing(u, tt, log);
+    const leo = u.srv >= 0 ? L[u.srv] : null, geo = link(us, g);
+    return { fdL: leo ? leo.fd : null, srv: u.srv, fdG: geo.el >= P.elMin ? geo.fd : null };
+  }) });
+}
+function advance(dt) {
+  const target = t + dt;
+  while (nextSample <= target) { sample(nextSample, nextSample > t - 1e-9 && hist.length > 0); nextSample += SAMPLE; }
+  t = target;
+  while (hist.length && hist[0].t < t - WINDOW) hist.shift();
+}
+function rebuild(keepT) {
+  if (!keepT) t = 0;
+  hist = []; events = [];
+  UES.forEach(u => { u.srv = -1; u.srvInit = false; });
+  const t0 = t; t = t0 - WINDOW; nextSample = t;
+  advance(WINDOW);
+}
+
+/* ---------------- canvas helpers ---------------- */
+let col = {};
+function readColors() {
+  const cs = getComputedStyle(document.documentElement);
+  ['bg','panel','ink','muted','line','grid','sky','earth','earthEdge','orbit','band','serve','rise','set','idle',
+   'ue-uav','ue-ac','ue-hst','ue-ship','dneg','dmid','dpos','nocov'].forEach(k => col[k] = cs.getPropertyValue('--' + k).trim());
+}
+const cv = {};
+function fit(id, hFn) {
+  const c = $(id), dpr = window.devicePixelRatio || 1, w = c.clientWidth, h = hFn(w);
+  c.style.height = h + 'px'; c.width = Math.round(w * dpr); c.height = Math.round(h * dpr);
+  const ctx = c.getContext('2d'); ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  cv[id] = { ctx, w, h };
+}
+function fitAll() {
+  fit('local', w => Math.max(w < 600 ? 440 : 360, Math.min(520, w * 0.56)));
+  fit('orbit', w => Math.max(280, Math.min(380, w * 0.9)));
+  fit('chart', w => Math.max(280, Math.min(380, w * 0.7)));
+}
+function hexToRgb(h) {
+  h = h.replace('#', ''); if (h.length === 3) h = h.split('').map(c => c + c).join('');
+  const n = parseInt(h, 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+function mix(a, b, f) { const A = hexToRgb(a), B = hexToRgb(b); return `rgb(${A.map((x, i) => Math.round(x + (B[i] - x) * f)).join(',')})`; }
+function dopColor(f) { f = Math.max(-1, Math.min(1, f)); return f < 0 ? mix(col.dmid, col.dneg, -f) : mix(col.dmid, col.dpos, f); }
+function alpha(hex, a) { const [r, g, b] = hexToRgb(hex); return `rgba(${r},${g},${b},${a})`; }
+const fmtHz = f => { const s = f < 0 ? '−' : '+', a = Math.abs(f); return a >= 1000 ? s + (a / 1000).toFixed(1) + ' kHz' : s + a.toFixed(0) + ' Hz'; };
+const fmtT = s => { const neg = s < 0; s = Math.abs(Math.round(s)); const h = Math.floor(s / 3600), m = Math.floor(s / 60) % 60, x = s % 60;
+  return (neg ? '−' : '') + (h ? h + ':' : '') + String(m).padStart(2, '0') + ':' + String(x).padStart(2, '0'); };
+const satName = k => k < 0 ? '—' : 'SAT-' + (k + 1);
+const satStatus = (k, serving) => serving.has(k) ? 'serve' : (satTheta(k, t) < 0 ? 'rise' : 'set');
+
+function drawSat(ctx, x, y, c, s = 1, hl = false) {
+  ctx.save(); ctx.translate(x, y); ctx.scale(s, s);
+  ctx.strokeStyle = c; ctx.lineWidth = 1.2; ctx.fillStyle = alpha(c.startsWith('#') ? c : '#888888', .18);
+  ctx.beginPath(); ctx.moveTo(-6, 0); ctx.lineTo(-10, 0); ctx.moveTo(6, 0); ctx.lineTo(10, 0); ctx.stroke();
+  [-1, 1].forEach(sd => { ctx.fillRect(sd > 0 ? 10 : -24, -4, 14, 8); ctx.strokeRect(sd > 0 ? 10 : -24, -4, 14, 8);
+    ctx.beginPath(); for (let i = 1; i < 4; i++) { const xx = (sd > 0 ? 10 : -24) + i * 3.5; ctx.moveTo(xx, -4); ctx.lineTo(xx, 4); } ctx.stroke(); });
+  ctx.fillStyle = col.panel; ctx.fillRect(-6, -5, 12, 10); ctx.strokeRect(-6, -5, 12, 10);
+  ctx.beginPath(); ctx.moveTo(0, 5); ctx.lineTo(0, 8); ctx.stroke();
+  if (hl) { ctx.lineWidth = 2.2; ctx.strokeRect(-7, -6, 14, 12); }
+  ctx.restore();
+}
+function drawUE(ctx, u, x, y, c) {
+  const dir = u.v >= 0 ? 1 : -1;
+  ctx.save(); ctx.translate(x, y); ctx.strokeStyle = c; ctx.fillStyle = col.panel; ctx.lineWidth = 1.4;
+  if (u.icon === 'plane') {
+    ctx.scale(dir, 1); ctx.beginPath();
+    ctx.moveTo(14, 0); ctx.quadraticCurveTo(12, -3, 6, -3); ctx.lineTo(-10, -3); ctx.lineTo(-14, -9); ctx.lineTo(-16, -9); ctx.lineTo(-14, -2);
+    ctx.lineTo(-14, 2); ctx.lineTo(6, 3); ctx.quadraticCurveTo(12, 3, 14, 0); ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(2, 0); ctx.lineTo(-4, 8); ctx.lineTo(-7, 8); ctx.lineTo(-4, 0); ctx.stroke();
+  } else if (u.icon === 'uav') {
+    ctx.beginPath(); ctx.moveTo(-9, -3); ctx.lineTo(9, 3); ctx.moveTo(-9, 3); ctx.lineTo(9, -3); ctx.stroke();
+    [[-10, -4], [10, -4], [-10, 4], [10, 4]].forEach(([a, b]) => { ctx.beginPath(); ctx.ellipse(a, b - 1, 5, 1.6, 0, 0, 7); ctx.stroke(); });
+    ctx.fillStyle = c; ctx.fillRect(-3, -2, 6, 4);
+  } else if (u.icon === 'train') {
+    ctx.scale(dir, 1); ctx.beginPath(); ctx.moveTo(-26, -1); ctx.lineTo(-26, -10); ctx.lineTo(14, -10); ctx.quadraticCurveTo(24, -9, 26, -1); ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = c; for (let i = 0; i < 5; i++) ctx.fillRect(-23 + i * 8, -8, 5, 3);
+    ctx.beginPath(); [-20, -12, 4, 12].forEach(a => { ctx.moveTo(a + 2, 1); ctx.arc(a, 1, 2, 0, 7); }); ctx.stroke();
+  } else if (u.icon === 'ship') {
+    ctx.scale(dir, 1); ctx.beginPath(); ctx.moveTo(-18, -5); ctx.lineTo(18, -5); ctx.lineTo(13, 1); ctx.lineTo(-15, 1); ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.strokeRect(-8, -11, 12, 6); ctx.beginPath(); ctx.moveTo(-2, -11); ctx.lineTo(-2, -16); ctx.stroke();
+  }
+  ctx.restore();
+}
+function dash(ctx, a) { ctx.setLineDash(a || []); }
+
+/* ---------------- local link view ---------------- */
+function drawLocal(cur) {
+  const { ctx, w, h } = cv.local;
+  const top = 64, bot = 56, baseY = h - bot, cz = Math.min(36, h * 0.07), A = baseY - cz - top;
+  const HTOP = 1600, gl = hk => Math.log1p(Math.max(0, hk)) / Math.log1p(HTOP);
+  const X = phi => w / 2 + phi / VW * (w / 2 - 16);
+  const Yg = phi => baseY - cz * (1 - (phi / VW) ** 2);
+  const Y = (phi, hk) => Yg(phi) - A * gl(hk);
+  const serving = new Set(UES.map(u => u.srv).filter(k => k >= 0));
+  ctx.fillStyle = col.sky; ctx.fillRect(0, 0, w, h);
+
+  // atmosphere bands
+  const band = (h0, h1, fill) => { ctx.beginPath(); for (let i = 0; i <= 80; i++) { const p = -VW + 2 * VW * i / 80; i ? ctx.lineTo(X(p), Y(p, h1)) : ctx.moveTo(X(p), Y(p, h1)); }
+    for (let i = 80; i >= 0; i--) { const p = -VW + 2 * VW * i / 80; ctx.lineTo(X(p), Y(p, h0)); } ctx.closePath(); ctx.fillStyle = fill; ctx.fill(); };
+  band(0, 15, col.band); band(60, 1000, col.band);
+  ctx.font = '10.5px system-ui,sans-serif'; ctx.fillStyle = col.muted; ctx.textAlign = 'left';
+  ctx.fillText('troposphere · O₂/H₂O', 8, Y(-VW, 6));
+  ctx.fillText('ionosphere', 8, Y(-VW, 200));
+  // altitude ticks
+  ctx.strokeStyle = col.grid; ctx.lineWidth = 1; dash(ctx, [3, 4]);
+  [1, 10, 100, 1000].forEach(hk => { ctx.beginPath(); ctx.moveTo(X(-VW * .82), Y(0, hk)); ctx.lineTo(w - 6, Y(0, hk)); ctx.stroke();
+    ctx.fillStyle = col.muted; ctx.textAlign = 'right'; ctx.fillText(hk + ' km', w - 8, Y(0, hk) - 3); });
+  dash(ctx);
+
+  // GEO marker (off-scale)
+  const g = geoState(), gx = X(Math.max(-VW * .92, Math.min(VW * .92, g.th))), gy = 22;
+  ctx.textAlign = 'center'; ctx.fillStyle = col.muted; ctx.font = '11px system-ui,sans-serif';
+
+  // LEO orbit arc
+  ctx.strokeStyle = col.orbit; ctx.lineWidth = 1; dash(ctx, [6, 5]); ctx.beginPath();
+  for (let i = 0; i <= 120; i++) { const p = -VW + 2 * VW * i / 120; i ? ctx.lineTo(X(p), Y(p, P.hLeo)) : ctx.moveTo(X(p), Y(p, P.hLeo)); }
+  ctx.stroke(); dash(ctx);
+  ctx.fillStyle = col.muted; ctx.textAlign = 'left'; ctx.fillText(`LEO orbit · h = ${P.hLeo} km · v = ${(rLeo() * omega()).toFixed(2)} km/s →`, 8, Y(-VW, P.hLeo) + 16);
+
+  // Earth
+  ctx.beginPath(); ctx.moveTo(0, h);
+  for (let i = 0; i <= 120; i++) { const p = -VW * 1.02 + 2.04 * VW * i / 120; ctx.lineTo(X(p), Yg(p)); }
+  ctx.lineTo(w, h); ctx.closePath(); ctx.fillStyle = col.earth; ctx.fill();
+  ctx.strokeStyle = col.earthEdge; ctx.lineWidth = 1.4; ctx.beginPath();
+  for (let i = 0; i <= 120; i++) { const p = -VW + 2 * VW * i / 120; i ? ctx.lineTo(X(p), Yg(p)) : ctx.moveTo(X(p), Yg(p)); } ctx.stroke();
+
+  // Doppler / coverage strip for a static ground terminal
+  const NS = Math.round(w / 4), fref = P.fc * 1e9 * rLeo() * omega() / C * (RE / rLeo());
+  const gs = geoState();
+  for (let i = 0; i < NS; i++) {
+    const p0 = -VW + 2 * VW * i / NS, p1 = -VW + 2 * VW * (i + 1) / NS, pm = (p0 + p1) / 2, gt = groundState(pm);
+    let c = col.nocov;
+    if (P.layer === 'LEO') { let be = -99, bf = 0; for (let k = 0; k < P.nSat; k++) { const l = link(gt, satState(k, t)); if (l.el >= P.elMin && l.el > be) { be = l.el; bf = l.fd; } }
+      if (be > -99) c = dopColor(bf / fref); }
+    else if (link(gt, gs).el >= P.elMin) c = dopColor(0);
+    ctx.fillStyle = c; ctx.beginPath(); ctx.moveTo(X(p0), Yg(p0) + 2); ctx.lineTo(X(p1), Yg(p1) + 2); ctx.lineTo(X(p1), Yg(p1) + 11); ctx.lineTo(X(p0), Yg(p0) + 11); ctx.fill();
+  }
+
+  // LEO sats, footprints, trajectories, ISLs
+  const lam = footprint(rLeo(), P.elMin), refG = groundState(0), vis = [];
+  for (let k = 0; k < P.nSat; k++) { const th = satTheta(k, t); if (Math.abs(th) < VW * 1.15) vis.push(k); }
+  vis.sort((a, b) => satTheta(a, t) - satTheta(b, t));
+  for (let i = 0; i + 1 < vis.length; i++) {
+    const a = satTheta(vis[i], t), b = satTheta(vis[i + 1], t); if (b - a > 4 * Math.PI / P.nSat) continue;
+    ctx.strokeStyle = col.idle; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(X(a), Y(a, P.hLeo)); ctx.lineTo(X(b), Y(b, P.hLeo)); ctx.stroke();
+    ctx.fillStyle = col.muted; ctx.textAlign = 'center'; ctx.fillText(`ISL ${(2 * rLeo() * Math.sin(Math.PI / P.nSat)).toFixed(0)} km`, (X(a) + X(b)) / 2, (Y(a, P.hLeo) + Y(b, P.hLeo)) / 2 - 6);
+  }
+  vis.forEach(k => {
+    const th = satTheta(k, t), st = satStatus(k, serving), c = col[st], sx = X(th), sy = Y(th, P.hLeo);
+    if (P.layer === 'LEO' || st !== 'serve') {
+      // footprint on ground
+      const a = Math.max(-VW, th - lam), b = Math.min(VW, th + lam);
+      if (b > a) { ctx.strokeStyle = alpha(c, st === 'serve' ? .9 : .45); ctx.lineWidth = st === 'serve' ? 3 : 2; ctx.beginPath();
+        for (let i = 0; i <= 30; i++) { const p = a + (b - a) * i / 30; i ? ctx.lineTo(X(p), Yg(p) - 2) : ctx.moveTo(X(p), Yg(p) - 2); } ctx.stroke(); }
+      if (st === 'serve') {
+        ctx.strokeStyle = alpha(c, .5); ctx.lineWidth = 1; dash(ctx, [4, 4]);
+        ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(X(th - lam), Y(th - lam, 0)); ctx.moveTo(sx, sy); ctx.lineTo(X(th + lam), Y(th + lam, 0)); ctx.stroke();
+        ctx.beginPath(); ctx.ellipse(sx, Yg(th) + 6, Math.abs(X(th + lam) - sx), 8, 0, 0, 7); ctx.stroke(); dash(ctx);
+      }
+    }
+    // past trajectory (4 min) solid, short future dashed
+    ctx.strokeStyle = alpha(c, .8); ctx.lineWidth = 2; ctx.beginPath();
+    for (let i = 0; i <= 24; i++) { const p = th - omega() * 240 * (1 - i / 24); i ? ctx.lineTo(X(p), Y(p, P.hLeo)) : ctx.moveTo(X(p), Y(p, P.hLeo)); } ctx.stroke();
+    drawSat(ctx, sx, sy, c, 1, st === 'serve');
+    const lr = link(refG, satState(k, t));
+    ctx.fillStyle = c; ctx.textAlign = 'center'; ctx.font = (st === 'serve' ? '600 ' : '') + '11px system-ui,sans-serif';
+    ctx.fillText(`${satName(k)} · α_ref ${lr.el.toFixed(1)}°${st === 'serve' ? ' · serving' : st === 'rise' ? ' · rising' : ' · setting'}`, sx, sy - 16);
+    ctx.font = '11px system-ui,sans-serif';
+  });
+
+  // GEO
+  const gc = P.layer === 'GEO' ? col.serve : col.idle;
+  drawSat(ctx, gx, gy, gc, .9, P.layer === 'GEO');
+  ctx.fillStyle = gc; ctx.textAlign = gx > w / 2 ? 'right' : 'left';
+  ctx.fillText(`GEO · h = 35 786 km (off-scale) · α_ref ${link(refG, g).el.toFixed(1)}°`, gx + (gx > w / 2 ? -30 : 30), gy + 4);
+
+  // UEs: trails, links, icons, labels
+  cur.forEach((cu, i) => {
+    const u = UES[i], c = col[u.col.slice(2)], ux = X(cu.us.phi), uy = Y(cu.us.phi, u.h);
+    // trail (past 30 min), break on wrap
+    ctx.strokeStyle = alpha(c, .55); ctx.lineWidth = 1.5; dash(ctx, [2, 3]); ctx.beginPath();
+    let prev = null;
+    for (let s = 1800; s >= 0; s -= 20) { const p = wrapV(uePhiRaw(u, t - s)); if (prev === null || Math.abs(p - prev) > VW) ctx.moveTo(X(p), Y(p, u.h)); else ctx.lineTo(X(p), Y(p, u.h)); prev = p; }
+    ctx.stroke();
+    // future heading arrow (10 min)
+    const pf = cu.us.phi + (u.v / 3600) / (RE + u.h) * 600, fx = X(pf), fy = Y(pf, u.h);
+    dash(ctx, [5, 4]); ctx.strokeStyle = c; ctx.beginPath(); ctx.moveTo(ux, uy); ctx.lineTo(fx, fy); ctx.stroke(); dash(ctx);
+    ctx.beginPath(); const dir = Math.sign(fx - ux) || 1; ctx.moveTo(fx, fy); ctx.lineTo(fx - 6 * dir, fy - 3); ctx.lineTo(fx - 6 * dir, fy + 3); ctx.closePath(); ctx.fillStyle = c; ctx.fill();
+    // links
+    const lnk = (tx, ty, primary) => { ctx.strokeStyle = primary ? c : alpha(c, .3); ctx.lineWidth = primary ? 1.6 : 1; dash(ctx, primary ? [] : [3, 4]);
+      ctx.beginPath(); ctx.moveTo(ux, uy); ctx.lineTo(tx, ty); ctx.stroke(); dash(ctx); };
+    if (u.srv >= 0 && cu.leo) { const th = satTheta(u.srv, t); lnk(X(th), Y(th, P.hLeo), P.layer === 'LEO');
+      if (P.layer === 'LEO') { ctx.fillStyle = c; ctx.textAlign = 'center'; ctx.save(); const mx = ux + (X(th) - ux) * .62, my = uy + (Y(th, P.hLeo) - uy) * .62;
+        ctx.translate(mx, my); let ang = Math.atan2(Y(th, P.hLeo) - uy, X(th) - ux); if (ang > Math.PI / 2) ang -= Math.PI; if (ang < -Math.PI / 2) ang += Math.PI;
+        ctx.rotate(ang); ctx.fillText(`d = ${cu.leo.d.toFixed(0)} km`, 0, -4); ctx.restore(); } }
+    if (cu.geo.el >= P.elMin) lnk(gx, gy + 8, P.layer === 'GEO');
+    // altitude stem for airborne UEs
+    if (u.h > 0.1) { ctx.strokeStyle = alpha(c, .35); ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(ux, uy + 8); ctx.lineTo(ux, Yg(cu.us.phi)); ctx.stroke(); }
+    drawUE(ctx, u, ux, uy, c);
+    const L = P.layer === 'LEO' ? cu.leo : (cu.geo.el >= P.elMin ? cu.geo : null);
+    const lines = [`${u.name} · ${Math.abs(u.v)} km/h ${u.v >= 0 ? '→' : '←'}`,
+      L ? `α ${L.el.toFixed(1)}° · f_d ${fmtHz(L.fd)}` : 'no coverage',
+      L ? `d ${L.d.toFixed(0)} km · RTT ${L.rtt.toFixed(1)} ms` : ''];
+    const ly = uy - (u.h > 5 ? 52 : u.h > 0.1 ? 46 : 40) - (i % 2) * 6;
+    ctx.textAlign = 'center'; ctx.font = '600 11px system-ui,sans-serif'; ctx.fillStyle = c; ctx.fillText(lines[0], ux, ly);
+    ctx.font = '10.5px ui-monospace,Menlo,Consolas,monospace'; ctx.fillStyle = col.ink; ctx.fillText(lines[1], ux, ly + 13); ctx.fillStyle = col.muted; ctx.fillText(lines[2], ux, ly + 25);
+    ctx.font = '11px system-ui,sans-serif';
+  });
+  ctx.fillStyle = col.muted; ctx.textAlign = 'left'; ctx.fillText(`Earth surface · R_E = ${RE} km`, 8, h - 10);
+}
+
+/* ---------------- orbit view (to scale) ---------------- */
+function drawOrbit(cur) {
+  const { ctx, w, h } = cv.orbit;
+  ctx.fillStyle = col.sky; ctx.fillRect(0, 0, w, h);
+  const R = P.zoomGeo ? RGEO * 1.08 : rLeo() * 1.22, s = (Math.min(w, h) / 2 - 12) / R;
+  const cx = w / 2, cy = P.zoomGeo ? h / 2 : h / 2 + RE * s * .55;
+  const M = (x, y) => [cx + x * s, cy - y * s];
+  const pol = (th, r) => M(r * Math.sin(th), r * Math.cos(th));
+  const serving = new Set(UES.map(u => u.srv).filter(k => k >= 0));
+  // Earth
+  ctx.beginPath(); ctx.arc(cx, cy, RE * s, 0, 7); ctx.fillStyle = col.earth; ctx.fill(); ctx.strokeStyle = col.earthEdge; ctx.lineWidth = 1.2; ctx.stroke();
+  // local window wedge
+  ctx.strokeStyle = col.ink; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(cx, cy, RE * s, -Math.PI / 2 - VW, -Math.PI / 2 + VW); ctx.stroke();
+  // rings
+  ctx.lineWidth = 1; ctx.strokeStyle = col.orbit; dash(ctx, [5, 5]);
+  ctx.beginPath(); ctx.arc(cx, cy, rLeo() * s, 0, 7); ctx.stroke();
+  ctx.beginPath(); ctx.arc(cx, cy, RGEO * s, 0, 7); ctx.stroke(); dash(ctx);
+  // GEO coverage cone
+  const g = geoState(), lg = footprint(RGEO, P.elMin), [gx, gy] = pol(g.th, RGEO);
+  const gc = P.layer === 'GEO' ? col.serve : col.idle;
+  ctx.fillStyle = alpha(gc, .08); ctx.beginPath(); ctx.moveTo(gx, gy); ctx.lineTo(...pol(g.th - lg, RE)); ctx.arc(cx, cy, RE * s, -Math.PI / 2 + g.th - lg, -Math.PI / 2 + g.th + lg); ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = alpha(gc, .9); ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(cx, cy, RE * s + 2, -Math.PI / 2 + g.th - lg, -Math.PI / 2 + g.th + lg); ctx.stroke();
+  // LEO sats with trails and footprints
+  const lam = footprint(rLeo(), P.elMin);
+  for (let k = 0; k < P.nSat; k++) {
+    const th = satTheta(k, t), st = satStatus(k, serving), c = st === 'serve' ? col.serve : SAT_PAL[k % SAT_PAL.length];
+    ctx.strokeStyle = alpha(c, .7); ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(cx, cy, rLeo() * s, -Math.PI / 2 + th - omega() * 480, -Math.PI / 2 + th); ctx.stroke();
+    if (st === 'serve' && P.layer === 'LEO') {
+      ctx.fillStyle = alpha(c, .12); ctx.beginPath(); ctx.moveTo(...pol(th, rLeo())); ctx.lineTo(...pol(th - lam, RE)); ctx.arc(cx, cy, RE * s, -Math.PI / 2 + th - lam, -Math.PI / 2 + th + lam); ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = c; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(cx, cy, RE * s + 2, -Math.PI / 2 + th - lam, -Math.PI / 2 + th + lam); ctx.stroke();
+    }
+    const [x, y] = pol(th, rLeo()); ctx.fillStyle = c; ctx.beginPath(); ctx.arc(x, y, st === 'serve' ? 4.5 : 3, 0, 7); ctx.fill();
+    if (!P.zoomGeo || st === 'serve') { ctx.font = '10px system-ui,sans-serif'; ctx.textAlign = 'center'; ctx.fillText(satName(k), ...pol(th, rLeo() + 14 / s)); }
+  }
+  drawSat(ctx, gx, gy, gc, .7, P.layer === 'GEO');
+  ctx.fillStyle = gc; ctx.font = '10.5px system-ui,sans-serif'; ctx.textAlign = 'center';
+  const [lx, ly] = pol(g.th, RGEO + 16 / s); ctx.fillText('GEO', lx, Math.max(10, ly));
+  // UEs + links
+  cur.forEach((cu, i) => {
+    const u = UES[i], c = col[u.col.slice(2)], [ux, uy] = M(...cu.us.p);
+    if (P.layer === 'LEO' && u.srv >= 0) { ctx.strokeStyle = alpha(c, .8); ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(ux, uy); ctx.lineTo(...pol(satTheta(u.srv, t), rLeo())); ctx.stroke(); }
+    if (P.layer === 'GEO' && cu.geo.el >= P.elMin) { ctx.strokeStyle = alpha(c, .6); ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(ux, uy); ctx.lineTo(gx, gy); ctx.stroke(); }
+    ctx.fillStyle = c; ctx.beginPath(); ctx.arc(ux, uy, 3, 0, 7); ctx.fill();
+  });
+  ctx.fillStyle = col.muted; ctx.textAlign = 'left'; ctx.font = '10.5px system-ui,sans-serif';
+  ctx.fillText('Earth-fixed frame · orbit plane', 8, h - 22);
+  ctx.fillText(`footprint @ ${P.elMin}°: LEO ±${(lam / D).toFixed(1)}° (${(lam * RE).toFixed(0)} km) · GEO ±${(lg / D).toFixed(1)}°`, 8, h - 8);
+}
+
+/* ---------------- Doppler chart + coverage timeline ---------------- */
+function drawChart() {
+  const { ctx, w, h } = cv.chart;
+  ctx.fillStyle = col.panel; ctx.fillRect(0, 0, w, h);
+  const ml = 56, mr = 12, mt = 12, rowH = 11, tl = UES.length * (rowH + 3) + 18, pb = h - tl - 22;
+  const t0 = t - WINDOW, X = tt => ml + (tt - t0) / WINDOW * (w - ml - mr);
+  let mx = 1;
+  hist.forEach(s => s.v.forEach(v => { if (P.layer === 'LEO' && v.fdL !== null) mx = Math.max(mx, Math.abs(v.fdL)); if (v.fdG !== null) mx = Math.max(mx, Math.abs(v.fdG)); }));
+  const mag = Math.pow(10, Math.floor(Math.log10(mx))), ymax = [1, 2, 2.5, 5, 10].map(m => m * mag).find(v => v >= mx * 1.05) || 10 * mag;
+  const Y = f => mt + (1 - (f + ymax) / (2 * ymax)) * (pb - mt);
+  // grid
+  ctx.font = '10.5px ui-monospace,Menlo,Consolas,monospace'; ctx.lineWidth = 1;
+  for (let i = -2; i <= 2; i++) { const f = ymax * i / 2, y = Y(f); ctx.strokeStyle = i === 0 ? col.muted : col.grid; ctx.beginPath(); ctx.moveTo(ml, y); ctx.lineTo(w - mr, y); ctx.stroke();
+    ctx.fillStyle = col.muted; ctx.textAlign = 'right'; ctx.fillText(Math.abs(ymax) >= 1000 ? (f / 1000).toFixed(ymax >= 10000 ? 0 : 1) + 'k' : f.toFixed(0), ml - 6, y + 3.5); }
+  ctx.save(); ctx.translate(12, (mt + pb) / 2); ctx.rotate(-Math.PI / 2); ctx.textAlign = 'center'; ctx.fillText('f_d [Hz]', 0, 0); ctx.restore();
+  for (let m = 0; m <= 30; m += 5) { const x = X(t0 + m * 60); ctx.strokeStyle = col.grid; ctx.beginPath(); ctx.moveTo(x, mt); ctx.lineTo(x, pb); ctx.stroke();
+    ctx.fillStyle = col.muted; ctx.textAlign = 'center'; ctx.fillText(m === 30 ? 'now' : `−${30 - m}m`, x, h - 6); }
+  // series
+  const series = (key, i, primary, dashed) => {
+    const c = col[UES[i].col.slice(2)]; ctx.strokeStyle = primary ? c : alpha(c, .3); ctx.lineWidth = primary ? 1.8 : 1.2; dash(ctx, dashed ? [5, 4] : []);
+    ctx.beginPath(); let pen = false, ps = null;
+    hist.forEach(s => { const v = s.v[i], f = v[key]; if (f === null || (key === 'fdL' && v.srv !== ps)) pen = false; ps = v.srv;
+      if (f === null) return; const x = X(s.t), y = Y(f); pen ? ctx.lineTo(x, y) : ctx.moveTo(x, y); pen = true; });
+    ctx.stroke(); dash(ctx);
+  };
+  UES.forEach((u, i) => { series('fdG', i, P.layer === 'GEO', true); if (P.layer === 'LEO') series('fdL', i, true, false); });
+  // coverage timeline
+  const ty0 = pb + 16;
+  ctx.textAlign = 'right'; ctx.font = '10px system-ui,sans-serif';
+  UES.forEach((u, i) => {
+    const y = ty0 + i * (rowH + 3);
+    ctx.fillStyle = col[u.col.slice(2)]; ctx.fillText(u.id, ml - 6, y + rowH - 2);
+    for (let j = 0; j < hist.length; j++) {
+      const s = hist[j], v = s.v[i], x0 = Math.max(ml, X(s.t)), x1 = X(s.t + SAMPLE) + .5;
+      let c = col.nocov;
+      if (P.layer === 'LEO') { if (v.srv >= 0) c = SAT_PAL[v.srv % SAT_PAL.length]; }
+      else if (v.fdG !== null) c = col.serve;
+      ctx.fillStyle = c; ctx.fillRect(x0, y, x1 - x0, rowH);
+      if (P.layer === 'LEO' && j && hist[j - 1].v[i].srv !== v.srv) { ctx.fillStyle = col.ink; ctx.fillRect(X(s.t) - .5, y - 2, 1.5, rowH + 4); }
+    }
+  });
+  ctx.fillStyle = col.muted; ctx.textAlign = 'left';
+  ctx.fillText(P.layer === 'LEO' ? 'serving sat per UE (colour = SAT id, ▮ = handover)' : 'GEO coverage per UE', ml, ty0 - 4);
+}
+function chartLegend() {
+  $('chartLegend').innerHTML = UES.map(u => `<span><span class="sw" style="background:var(${u.col})"></span>${u.id}</span>`).join('') +
+    `<span><span class="sw"></span>— LEO serving</span><span><span class="sw d" style="border-color:var(--muted)"></span>GEO</span>`;
+}
+
+/* ---------------- panels ---------------- */
+function predictHO(u) {
+  if (u.srv < 0) return null;
+  const k = u.srv;
+  for (let s = 5; s <= 1800; s += 5) if (link(ueState(u, t + s), satState(k, t + s)).el < P.elMin) return s;
+  return null;
+}
+function updatePanels(cur) {
+  const L = cur.map(cu => P.layer === 'LEO' ? cu.leo : (cu.geo.el >= P.elMin ? cu.geo : null));
+  const rate = cur.map((cu, i) => { const u = UES[i]; if (!L[i]) return null;
+    const s1 = P.layer === 'LEO' ? satState(u.srv, t + 1) : geoState(); return link(ueState(u, t + 1), s1).fd - L[i].fd; });
+  const row = (name, f) => `<tr><td>${name}</td>${cur.map((cu, i) => `<td>${f(i)}</td>`).join('')}</tr>`;
+  const na = '<span class="dim">—</span>';
+  $('ueTable').innerHTML = `<table class="mono"><tr><th>UE</th>${UES.map(u => `<th style="color:var(${u.col})">${u.id}</th>`).join('')}</tr>` +
+    row('v', i => `${UES[i].v < 0 ? '← ' : ''}${Math.abs(UES[i].v)} km/h${UES[i].v >= 0 ? ' →' : ''}`) +
+    row('h', i => UES[i].h >= 1 ? UES[i].h + ' km' : UES[i].h > 0 ? UES[i].h * 1000 + ' m' : 'ground') +
+    row('sat', i => P.layer === 'LEO' ? (UES[i].srv >= 0 ? `<span class="serve">${satName(UES[i].srv)}</span>` : na) : (L[i] ? '<span class="serve">GEO</span>' : na)) +
+    row('α', i => L[i] ? L[i].el.toFixed(1) + '°' : na) +
+    row('d', i => L[i] ? L[i].d.toFixed(0) + ' km' : na) +
+    row('f_d', i => L[i] ? fmtHz(L[i].fd) : na) +
+    row('df_d/dt', i => rate[i] !== null ? (rate[i] < 0 ? '−' : '+') + Math.abs(rate[i]).toFixed(rate[i] && Math.abs(rate[i]) < 10 ? 2 : 0) + ' Hz/s' : na) +
+    row('PL', i => L[i] ? L[i].pl.toFixed(1) + ' dB' : na) +
+    row('delay', i => L[i] ? L[i].ow.toFixed(2) + ' ms' : na) +
+    row('RTT', i => L[i] ? L[i].rtt.toFixed(1) + ' ms' : na) +
+    row('link', i => L[i] ? '<span class="ok">LOS</span>' : '<span class="bad">no cov.</span>') + '</table>';
+
+  const serving = new Set(UES.map(u => u.srv).filter(k => k >= 0)), refG = groundState(0);
+  const ks = [...Array(P.nSat).keys()].filter(k => Math.abs(satTheta(k, t)) < VW * 1.6).sort((a, b) => satTheta(b, t) - satTheta(a, t));
+  const T = 2 * Math.PI / omega() / 60;
+  $('const').innerHTML = ks.map(k => { const st = satStatus(k, serving), el = link(refG, satState(k, t)).el;
+      return `<div class="${st}">${satName(k).padEnd(6, ' ')} · α_ref = ${el.toFixed(1).padStart(5, ' ')}° · ${el < 0 ? 'below horizon' : st === 'serve' ? 'serving' : st === 'rise' ? 'rising' : 'setting'}</div>`; }).join('') +
+    `<div class="${P.layer === 'GEO' ? 'serve' : 'dim'}">GEO    · α_ref = ${link(refG, geoState()).el.toFixed(1)}° · ${P.layer === 'GEO' ? 'serving' : 'standby'}</div>` +
+    `<div class="dim" style="border-top:1px solid var(--line);margin-top:6px;padding-top:6px">LEO h=${P.hLeo} km · v=${(rLeo() * omega()).toFixed(2)} km/s · T=${T.toFixed(1)} min · ${P.nSat}/plane<br>f_c=${P.fc} GHz · max |f_d| ≈ ${fmtHz(P.fc * 1e9 * rLeo() * omega() / C * RE / rLeo()).slice(1)}</div>`;
+
+  const ho = UES.map(u => ({ u, s: P.layer === 'LEO' ? predictHO(u) : null }));
+  const geoAll = cur.every(cu => cu.geo.el >= P.elMin);
+  $('state').innerHTML = (P.layer === 'LEO'
+      ? ho.map(({ u, s }) => `<div><b style="color:var(${u.col})">${u.id}</b> · ${u.srv >= 0 ? `${satName(u.srv)} → HO in <span class="mono">${s === null ? '>30:00' : fmtT(s)}</span>` : '<span class="bad">no LEO coverage</span>'}</div>`).join('')
+      : `<div>GEO serving ${geoAll ? 'all UEs' : 'UEs in footprint'} · no handovers</div><div>Doppler only from UE motion (max ${fmtHz(Math.max(...cur.map(c => Math.abs(c.geo.fd))))})</div>`) +
+    `<div class="dim" style="margin-top:6px">Mean access RTT: LEO ${avg(cur.map(c => c.leo && c.leo.rtt)).toFixed(1)} ms · GEO ${avg(cur.map(c => c.geo.rtt)).toFixed(1)} ms</div>` +
+    `<div style="border-top:1px solid var(--line);margin-top:6px;padding-top:6px;font-size:12px" class="mono">${events.length ? events.slice(0, 7).map(e => `<div>${fmtT(e.t)} · ${e.ue.padEnd(4, ' ')} ${satName(e.from)} → ${satName(e.to)}</div>`).join('') : '<span class="dim">no handover events yet</span>'}</div>`;
+}
+const avg = a => { a = a.filter(x => x); return a.length ? a.reduce((s, x) => s + x, 0) / a.length : 0; };
+
+/* ---------------- main loop ---------------- */
+function current() {
+  const g = geoState();
+  return UES.map(u => { const us = ueState(u, t); return { us, leo: u.srv >= 0 ? link(us, satState(u.srv, t)) : null, geo: link(us, g) }; });
+}
+let last = performance.now(), lastPanel = 0;
+function frame(now) {
+  const dt = Math.min(.1, (now - last) / 1000); last = now;
+  if (P.playing) advance(dt * P.speed);
+  const cur = current();
+  drawLocal(cur); drawOrbit(cur); drawChart();
+  $('clock').textContent = 't = ' + fmtT(t);
+  const srvs = [...new Set(UES.map(u => u.srv).filter(k => k >= 0))].map(satName).join(', ') || 'none';
+  $('status').textContent = `t = ${fmtT(t)} | ${P.speed}× | layer ${P.layer} | ${P.layer === 'LEO' ? 'serving: ' + srvs : 'GEO @ ' + P.geoLon + '°'} | f_c ${P.fc} GHz | HO events: ${events.length}`;
+  if (now - lastPanel > 200) { updatePanels(cur); lastPanel = now; }
+  requestAnimationFrame(frame);
+}
+
+/* ---------------- controls ---------------- */
+function bindRange(id, key, fmt) {
+  const el = $(id), out = $(id + 'O');
+  const set = () => { P[key] = +el.value; out.textContent = fmt(P[key]); };
+  set(); el.addEventListener('input', () => { set(); rebuild(true); });
+}
+bindRange('hLeo', 'hLeo', v => v + ' km');
+bindRange('nSat', 'nSat', v => v);
+bindRange('elMin', 'elMin', v => v + '°');
+bindRange('geoLon', 'geoLon', v => (v > 0 ? '+' : '') + v + '°');
+$('fc').addEventListener('change', e => { P.fc = +e.target.value; rebuild(true); });
+$('speed').addEventListener('change', e => P.speed = +e.target.value);
+$('play').addEventListener('click', e => { P.playing = !P.playing; e.target.textContent = P.playing ? '❚❚ Pause' : '▶ Play'; e.target.classList.toggle('on', P.playing); });
+$('reset').addEventListener('click', () => rebuild(false));
+$('zoom').addEventListener('click', e => { P.zoomGeo = !P.zoomGeo; e.target.textContent = P.zoomGeo ? 'Zoom: GEO' : 'Zoom: LEO'; });
+['LEO', 'GEO'].forEach(l => $('ly' + l).addEventListener('click', () => {
+  P.layer = l; $('lyLEO').classList.toggle('on', l === 'LEO'); $('lyGEO').classList.toggle('on', l === 'GEO'); $('lyTag').textContent = l; }));
+window.addEventListener('resize', fitAll);
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', readColors);
+
+readColors(); fitAll(); chartLegend(); rebuild(false);
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
