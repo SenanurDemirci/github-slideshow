@@ -25,6 +25,7 @@ python leo_geo_doppler.py                         # etkileşimli pencere (kaydı
 python leo_geo_doppler.py --layer GEO --fc 20     # GEO, Ka-band 20 GHz ile başla
 python leo_geo_doppler.py --save sim.gif --frames 120   # animasyonu GIF olarak kaydet
 python leo_geo_doppler.py --png ekran.png --t 600       # t = 600 s anındaki tek kare
+python leo_geo_doppler.py --coverage kapsama.png        # kapsama (footprint) analizi figürü
 ```
 
 Pencerede: LEO irtifası, düzlemdeki uydu sayısı, minimum elevasyon, GEO konumu,
@@ -36,5 +37,6 @@ simülasyon hızı, LEO/GEO servis katmanı ve taşıyıcı frekansı değiştir
 - Varsayılan parametreler: `Sim.__init__`
 - Doppler / yol kaybı formülleri: `link()` fonksiyonu
 - Handover kuralı: `Sim.eval_serving()`
+- Kapsama analizi (λ, yarıçap, gereken uydu sayısı): `Sim.coverage()` ve `coverage_figure()`
 
 `leo-geo-doppler.html` aynı simülasyonun tarayıcı sürümüdür (isteğe bağlı).

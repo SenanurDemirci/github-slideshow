@@ -213,6 +213,21 @@ class Sim:
             out.append(dict(us=us, leo=leo, geo=link(us, g, self.fc)))
         return out
 
+    def coverage(self):
+        """Kapsama analizi: λ = arccos(R_E·cos ε / r) − ε  (ε = minimum elevasyon)."""
+        lam_leo = footprint(self.r_leo, self.el_min)
+        lam_geo = footprint(RGEO, self.el_min)
+        ratio = np.pi / lam_leo                       # kesintisiz kapsama: 2π/N < 2λ  →  N > π/λ
+        n_min = int(np.floor(ratio)) + 1
+        return dict(
+            lam_leo=lam_leo, r_leo_km=lam_leo * RE, lam_geo=lam_geo, r_geo_km=lam_geo * RE,
+            cap_leo=(1 - np.cos(lam_leo)) / 2,          # Dünya yüzeyinin kapsanan oranı (küresel başlık)
+            cap_geo=(1 - np.cos(lam_geo)) / 2,
+            pass_min=2 * lam_leo / self.omega / 60,     # bir uydunun görünme süresi [dk]
+            ho_min=2 * np.pi / self.omega / 60 / self.n_sat,   # handover aralığı T/N [dk]
+            n_ratio=ratio, n_min=n_min, continuous=self.n_sat >= n_min,
+        )
+
     def predict_ho(self, i):
         """Servis eden uydu el_min'in altına inene kadar kalan süre [s]."""
         k = self.srv[i]
@@ -585,8 +600,29 @@ class App:
                     f"{s.n_sat}/plane\nf_c={s.fc:g} GHz · max |f_d| ≈ {fmt_hz(s.fc * 1e9 * s.omega * RE / C)[1:]}")
         ax.text(0, y, info, fontsize=8, color="0.4", transform=ax.transAxes, va="top")
 
+        # kapsama (footprint) analizi
+        cv = s.coverage()
+        y -= 0.065
+        ax.text(0, y, "COVERAGE", fontsize=10, fontweight="bold", transform=ax.transAxes)
+        ax.text(0.30, y, "λ = arccos(R_E·cos ε / r) − ε", fontsize=8, color="0.4", transform=ax.transAxes)
+        y -= 0.026
+        lines = [
+            (f"ε_min = {s.el_min:.0f}°", "0.2"),
+            (f"LEO {s.h_leo:.0f} km: λ = {cv['lam_leo'] / D:.1f}° → radius {cv['r_leo_km']:.0f} km "
+             f"({100 * cv['cap_leo']:.1f}% of Earth) · visible {cv['pass_min']:.1f} min", "0.2"),
+            (f"GEO: λ = {cv['lam_geo'] / D:.1f}° → radius {cv['r_geo_km']:.0f} km ({100 * cv['cap_geo']:.0f}% of Earth)", "0.2"),
+        ]
+        if not geo_only:
+            ok = cv["continuous"]
+            lines.append((f"Sats/plane needed: N > π/λ = {cv['n_ratio']:.1f} → N_min = {cv['n_min']} · "
+                          f"now {s.n_sat} → {'continuous ✓' if ok else 'COVERAGE GAPS ✗'}",
+                          COL_RISE if ok else COL_SET))
+        for txt, c in lines:
+            ax.text(0, y, txt, fontsize=7.8, color=c, transform=ax.transAxes)
+            y -= 0.021
+
         # bağlantı durumu + handover kaydı
-        y -= 0.07
+        y -= 0.03
         ax.text(0, y, "LINK STATE", fontsize=10, fontweight="bold", transform=ax.transAxes)
         y -= 0.03
         if s.layer == "LEO":
@@ -641,6 +677,107 @@ def make_sim(layer="LEO", fc=2.0, h_leo=600, n_sat=12, el_min=10, geo_lon=35, sp
     return sim
 
 
+def coverage_figure(h_leo=600, el_min=10, n_sat=12, dpi=80, **_ignored):
+    """Kapsama analizi figürü: λ = arccos(R_E·cos ε / r) − ε
+    (a) kapsama yarıçapı – irtifa, (b) gereken uydu sayısı – irtifa,
+    (c) kapsama üçgeni (seçilen LEO), (d) LEO ve GEO kapsaması gerçek ölçekte."""
+    fig, axs = plt.subplots(2, 2, figsize=(15, 10), dpi=dpi)
+    (a, b), (c, d) = axs
+    hs = np.linspace(300, 2000, 300)
+    eps_list = sorted({0, 10, 30, int(el_min)})
+    colors = plt.get_cmap("viridis")(np.linspace(0, 0.85, len(eps_list)))
+
+    # (a) kapsama yarıçapı
+    for e, col in zip(eps_list, colors):
+        lam = footprint(RE + hs, e)
+        a.plot(hs, lam * RE, color=col, lw=2.2 if e == el_min else 1.3,
+               label=f"ε = {e}°   (GEO: {footprint(RGEO, e) * RE:.0f} km)")
+    lam0 = footprint(RE + h_leo, el_min)
+    a.plot(h_leo, lam0 * RE, "o", color="k")
+    a.annotate(f"{h_leo:.0f} km, ε={el_min:.0f}°\nλ={lam0 / D:.1f}° → {lam0 * RE:.0f} km", (h_leo, lam0 * RE),
+               (h_leo + 120, lam0 * RE + 700), arrowprops=dict(arrowstyle="->"), fontsize=9)
+    a.set_xlabel("LEO altitude h [km]")
+    a.set_ylabel("footprint radius on ground  R_E·λ  [km]")
+    a.set_title("(a) Coverage radius vs altitude and min elevation", loc="left", fontsize=10)
+    a.grid(alpha=0.3)
+    a.legend(fontsize=8)
+
+    # (b) kesintisiz kapsama için düzlem başına gereken uydu sayısı
+    for e, col in zip(eps_list, colors):
+        nmin = np.floor(np.pi / footprint(RE + hs, e)) + 1
+        b.step(hs, nmin, where="mid", color=col, lw=2.2 if e == el_min else 1.3, label=f"ε = {e}°")
+    n0 = int(np.floor(np.pi / lam0)) + 1
+    b.plot(h_leo, n0, "o", color="k")
+    b.axhline(n_sat, color="0.4", ls="--", lw=1)
+    b.text(hs[-1], n_sat + 0.4, f"simulation: N = {n_sat}", ha="right", fontsize=8, color="0.3")
+    b.annotate(f"N_min = {n0}", (h_leo, n0), (h_leo + 150, n0 + 6), arrowprops=dict(arrowstyle="->"), fontsize=9)
+    b.set_xlabel("LEO altitude h [km]")
+    b.set_ylabel("satellites per plane  N_min = ⌊π/λ⌋ + 1")
+    b.set_title("(b) Satellites needed for continuous coverage (one plane)", loc="left", fontsize=10)
+    b.set_ylim(0, 40)
+    b.grid(alpha=0.3)
+    b.legend(fontsize=8)
+
+    # (c) kapsama üçgeni: Dünya merkezi O, sınırdaki UE U, uydu S
+    r = RE + h_leo
+    eta = np.arcsin(RE * np.cos(el_min * D) / r)
+    pol = lambda th, rr: (rr * np.sin(th), rr * np.cos(th))
+    th = np.linspace(-0.45, 0.45, 300)
+    c.fill_between(*pol(th, RE), RE * 0.75, color=COL_EARTH)
+    c.plot(*pol(th, RE), color="0.25", lw=1.2)
+    c.plot(*pol(th, r), "--", color="0.6", lw=1)
+    S, U = np.array(pol(0, r)), np.array(pol(lam0, RE))
+    c.plot(*zip(S, U), color=COL_SERVE, lw=2)
+    c.plot(*zip(S, pol(-lam0, RE)), color=COL_SERVE, lw=2)
+    c.plot(*pol(np.linspace(-lam0, lam0, 80), RE * 1.002), color=COL_SERVE, lw=5, alpha=0.6)
+    c.plot([0, 0], [RE * 0.75, r], ":", color="0.4")
+    c.plot([0, U[0] * 0.93], [RE * 0.75, RE * 0.75 + (U[1] - RE * 0.75) * 0.93], ":", color="0.4")
+    hor = np.array([np.cos(lam0), -np.sin(lam0)])       # UE'nin yerel ufku
+    c.plot(*zip(U - hor * 900, U + hor * 300), color="0.5", lw=1)
+    c.plot(*S, "s", ms=10, color=COL_SERVE, mec="k")
+    c.plot(*U, "o", ms=7, color=UES[2]["color"], mec="k")
+    c.text(S[0] + 60, S[1] + 40, f"satellite  (h = {h_leo:.0f} km)", fontsize=9)
+    c.text(S[0] + 110, S[1] - 420, f"η = {eta / D:.1f}°\n(nadir angle)", fontsize=9, color=COL_SERVE)
+    c.text(U[0] + 60, U[1] + 70, f"ε = {el_min:.0f}°", fontsize=10, color=UES[2]["color"], fontweight="bold")
+    c.text(U[0] - 40, U[1] - 260, "UE at coverage edge", fontsize=8, ha="center")
+    c.text(lam0 * RE * 0.25, RE * 0.8, f"λ = {lam0 / D:.1f}°  (Earth-centre angle)", fontsize=9)
+    c.text(0, RE + 40, f"radius = R_E·λ = {lam0 * RE:.0f} km", fontsize=9, ha="center", color=COL_SERVE, fontweight="bold")
+    c.set_aspect("equal")
+    c.set_xlim(-0.5 * r, 0.5 * r)
+    c.set_ylim(RE * 0.78, r * 1.06)
+    c.set_xticks([]), c.set_yticks([])
+    c.set_title("(c) Geometry:  sin η = R_E·cos ε / r ,  λ = 90° − ε − η", loc="left", fontsize=10)
+
+    # (d) LEO ve GEO kapsaması gerçek ölçekte
+    full = np.linspace(0, 2 * np.pi, 361)
+    d.fill(*pol(full, RE), color=COL_EARTH, ec="0.25")
+    d.plot(*pol(full, r), "--", color="0.6", lw=0.8)
+    d.plot(*pol(full, RGEO), "--", color="0.6", lw=0.8)
+    lg = footprint(RGEO, el_min)
+    for th0, rr, lam, col, name in [(0.0, r, lam0, COL_SERVE, "LEO"), (np.pi / 2, RGEO, lg, "#2f6fb5", "GEO")]:
+        ex, ey = pol(np.linspace(th0 - lam, th0 + lam, 100), RE)
+        sx, sy = pol(th0, rr)
+        d.fill(np.r_[sx, ex], np.r_[sy, ey], color=col, alpha=0.18, lw=0)
+        d.plot(*pol(np.linspace(th0 - lam, th0 + lam, 100), RE * 1.01), color=col, lw=4)
+        d.plot(sx, sy, "s", color=col, mec="k", ms=8)
+    d.text(*pol(0, r + 2500), f"LEO: ±{lam0 / D:.1f}°", ha="center", color=COL_SERVE, fontsize=9, fontweight="bold")
+    d.text(*pol(np.pi / 2, RGEO + 1500), f"GEO: ±{lg / D:.1f}°", ha="left", va="center", color="#2f6fb5", fontsize=9,
+           fontweight="bold")
+    cap_l, cap_g = (1 - np.cos(lam0)) / 2, (1 - np.cos(lg)) / 2
+    d.text(-RGEO * 1.05, -RGEO * 1.0,
+           f"Covered share of Earth surface:\n  one LEO sat: {100 * cap_l:.1f}%\n  one GEO sat: {100 * cap_g:.0f}%  "
+           f"(≈ {cap_g / cap_l:.0f}× LEO)", fontsize=9, va="bottom")
+    d.set_aspect("equal")
+    d.set_xlim(-RGEO * 1.1, RGEO * 1.25)
+    d.set_ylim(-RGEO * 1.1, RGEO * 1.1)
+    d.set_xticks([]), d.set_yticks([])
+    d.set_title(f"(d) LEO vs GEO coverage to scale (ε = {el_min:.0f}°)", loc="left", fontsize=10)
+    fig.suptitle("Footprint:  λ = arccos(R_E·cos ε / r) − ε     radius = R_E·λ     "
+                 "continuous coverage in one plane needs  N > π/λ", fontsize=12)
+    fig.tight_layout(rect=(0, 0, 1, 0.96))
+    return fig
+
+
 def snapshot(t=0.0, dpi=80, **params):
     """t [s] anındaki tek kareyi çizer ve figürü döndürür (notebook'ta gösterilir)."""
     sim = make_sim(**params)
@@ -672,6 +809,7 @@ def main():
     ap.add_argument("--save", help="animasyonu kaydet (.gif veya .mp4)")
     ap.add_argument("--frames", type=int, default=200, help="--save için kare sayısı")
     ap.add_argument("--png", help="tek kareyi PNG olarak kaydet")
+    ap.add_argument("--coverage", help="kapsama analizi figürünü PNG olarak kaydet")
     ap.add_argument("--t", type=float, default=0.0, help="--png için simülasyon zamanı [s]")
     ap.add_argument("--layer", choices=["LEO", "GEO"], default="LEO")
     ap.add_argument("--fc", type=float, default=2.0, help="taşıyıcı frekans [GHz]")
@@ -682,7 +820,10 @@ def main():
     sim.layer, sim.fc, sim.speed = a.layer, a.fc, a.speed
     sim.rebuild(keep_t=False)
 
-    if a.png:
+    if a.coverage:
+        coverage_figure(h_leo=sim.h_leo, el_min=sim.el_min, n_sat=sim.n_sat).savefig(a.coverage, dpi=110)
+        print("saved", a.coverage)
+    elif a.png:
         app = App(sim, interactive=False)
         sim.advance(a.t)
         app.draw()
