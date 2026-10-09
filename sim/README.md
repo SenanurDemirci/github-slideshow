@@ -1,6 +1,16 @@
 # LEO / GEO NTN Doppler & Kapsama Simülatörü
 
 `leo_geo_doppler.py` — Python sürümü (numpy + matplotlib).
+`leo_geo_doppler_colab.ipynb` — Google Colab notebook'u (kod içine gömülü, tek dosya yeterli).
+
+## Google Colab'da çalıştırma
+
+1. https://colab.research.google.com adresine gidin.
+2. *Dosya → Not defteri yükle* (File → Upload notebook) ile `leo_geo_doppler_colab.ipynb` dosyasını seçin.
+3. *Çalışma zamanı → Tümünü çalıştır* (Runtime → Run all).
+
+Kurulum gerekmez (numpy, matplotlib, ipywidgets Colab'da hazır). Notebook'ta tek kare,
+kaydırıcılı etkileşimli çizim, oynat/durdur düğmeli animasyon ve GIF indirme hücreleri vardır.
 
 ## Kurulum
 

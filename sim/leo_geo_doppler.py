@@ -228,9 +228,10 @@ class Sim:
 class App:
     def __init__(self, sim, interactive=True):
         self.sim = sim
-        self.fig = plt.figure(figsize=(17, 10.5))
-        self.fig.canvas.manager.set_window_title("LEO / GEO NTN Doppler Simulator") if interactive else None
-        gs = self.fig.add_gridspec(3, 3, left=0.04, right=0.99, top=0.95, bottom=0.17,
+        self.fig = plt.figure(figsize=(17, 10.5) if interactive else (17, 9.2))
+        if interactive:
+            self.fig.canvas.manager.set_window_title("LEO / GEO NTN Doppler Simulator")
+        gs = self.fig.add_gridspec(3, 3, left=0.04, right=0.99, top=0.95, bottom=0.17 if interactive else 0.06,
                                    width_ratios=[1, 1.25, 1.05], height_ratios=[1.35, 0.85, 0.25],
                                    hspace=0.28, wspace=0.18)
         self.ax_local = self.fig.add_subplot(gs[0, :2])
@@ -424,7 +425,7 @@ class App:
         ax.fill(np.r_[g["p"][0], ex], np.r_[g["p"][1], ey], color=gcol, alpha=0.08, lw=0)
         ax.plot(*arc(g["th"] - lg, g["th"] + lg, RE * 1.01), color=gcol, lw=3)
         ax.plot(*g["p"], "s", color=gcol, mec="k", ms=8)
-        ax.text(*pol(g["th"], RGEO * 1.07), "GEO", color=gcol, fontsize=8, ha="center")
+        ax.text(*pol(g["th"], RGEO * 1.07), "GEO", color=gcol, fontsize=8, ha="center", clip_on=True)
         # LEO uyduları
         lam = footprint(s.r_leo, s.el_min)
         for k in range(s.n_sat):
@@ -603,6 +604,41 @@ class App:
         if self.sim.playing:
             self.sim.advance(dt * self.sim.speed)
         self.draw()
+
+
+# ----------------------------------------------------------------- Colab / Jupyter yardımcıları
+def make_sim(layer="LEO", fc=2.0, h_leo=600, n_sat=12, el_min=10, geo_lon=35, speed=30):
+    """Verilen parametrelerle simülasyon nesnesi oluşturur."""
+    sim = Sim()
+    sim.layer, sim.fc, sim.h_leo, sim.n_sat = layer, float(fc), float(h_leo), int(n_sat)
+    sim.el_min, sim.geo_lon, sim.speed = float(el_min), float(geo_lon), float(speed)
+    sim.rebuild(keep_t=False)
+    return sim
+
+
+def snapshot(t=0.0, dpi=80, **params):
+    """t [s] anındaki tek kareyi çizer ve figürü döndürür (notebook'ta gösterilir)."""
+    sim = make_sim(**params)
+    app = App(sim, interactive=False)
+    sim.advance(t)
+    app.draw()
+    app.fig.set_dpi(dpi)
+    return app.fig
+
+
+def animate(frames=60, step_s=30.0, dpi=60, **params):
+    """Her karede step_s simülasyon saniyesi ilerleyen animasyon döndürür.
+    Notebook'ta: HTML(animate(...).to_jshtml())"""
+    sim = make_sim(**params)
+    app = App(sim, interactive=False)
+    app.fig.set_dpi(dpi)
+    def update(_f):
+        sim.advance(step_s)
+        app.draw()
+    app.draw()
+    anim = FuncAnimation(app.fig, update, frames=frames, interval=200)
+    plt.close(app.fig)   # notebook'ta fazladan statik figür görünmesin
+    return anim
 
 
 # ----------------------------------------------------------------- ana program
