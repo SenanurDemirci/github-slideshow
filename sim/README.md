@@ -3,6 +3,23 @@
 `leo_geo_doppler.py` — Python sürümü (numpy + matplotlib).
 `leo_geo_doppler_colab.ipynb` — Google Colab notebook'u (kod içine gömülü, tek dosya yeterli).
 `matlab/` — MATLAB sürümü (`leo_geo_doppler_sim.m`, `coverage_analysis.m`).
+`ntn_3gpp.py` — 3GPP TR 38.811 / TR 38.821 formülleriyle link budget, radyo kapsaması ve kapasite.
+
+## 3GPP link budget, kapsama ve kapasite (`ntn_3gpp.py`)
+
+```
+python ntn_3gpp.py      # TR 38.821 Tablo 6.1.3.3-1'deki 30 vakayı (60 CNR) yeniden üretir ve karşılaştırır
+```
+
+| İçerik | Kaynak |
+|---|---|
+| CNR, G/T, EIRP, CNIR | TR 38.821 (6.1.3.1-1 … -5) |
+| Uydu / UE parametreleri, bant genişliği, kayıplar | TR 38.821 Tablo 6.1.1.1-1/2/3, 6.1.3.2-1 |
+| FSPL, eğik mesafe, atmosfer kaybı | TR 38.811 (6.6-2), (6.6-3), (6.6-8) |
+| LOS olasılığı, gölgeleme, clutter kaybı, sintilasyon | TR 38.811 Tablo 6.6.1-1, 6.6.2-1/2/3, 6.6.6.2.1-1 |
+| Kapasite: Shannon C = B·log2(1+CNIR) | belgelerde yok (üst sınır); TR 38.821 Tablo 6.1.1.3-1 SLS ile karşılaştırılır |
+
+Colab notebook'unda 7–9. hücreler (link budget, radyo kapsaması, kapasite) bu dosyayı kullanır.
 
 ## MATLAB'da çalıştırma
 

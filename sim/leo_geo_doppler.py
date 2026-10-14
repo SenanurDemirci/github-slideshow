@@ -37,7 +37,11 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 from matplotlib.collections import LineCollection
-from matplotlib.colors import to_rgb
+
+try:                      # TR 38.811 / 38.821 link budget (aynı klasördeki ntn_3gpp.py)
+    import ntn_3gpp as N3
+except ImportError:
+    N3 = None
 from matplotlib.widgets import Button, RadioButtons, Slider
 
 # ----------------------------------------------------------------- sabitler
@@ -251,8 +255,7 @@ class App:
                                    hspace=0.28, wspace=0.18)
         self.ax_local = self.fig.add_subplot(gs[0, :2])
         self.ax_orbit = self.fig.add_subplot(gs[1:, 0])
-        self.ax_dop = self.fig.add_subplot(gs[1, 1])
-        self.ax_cov = self.fig.add_subplot(gs[2, 1], sharex=self.ax_dop)
+        self.ax_dop = self.fig.add_subplot(gs[1:, 1])
         self.ax_info = self.fig.add_subplot(gs[:, 2])
         self.cmap = plt.get_cmap("coolwarm")
         if interactive:
@@ -486,10 +489,10 @@ class App:
         ax.set_xticks([]), ax.set_yticks([])
         ax.set_title(title, fontsize=9, loc="left")
 
-    # --- Doppler grafiği ve kapsama zaman çizelgesi
+    # --- Doppler grafiği
     def draw_doppler(self):
-        s, ax, axc = self.sim, self.ax_dop, self.ax_cov
-        ax.clear(), axc.clear()
+        s, ax = self.sim, self.ax_dop
+        ax.clear()
         if not s.hist:
             return
         tt = np.array([h[0] for h in s.hist]) - s.t                 # 0 = şimdi
@@ -508,30 +511,12 @@ class App:
         ax.axhline(0, color="0.5", lw=0.8)
         ax.set_xlim(-WINDOW / 60, 0)
         ax.set_ylabel("f_d [kHz]", fontsize=8)
-        ax.tick_params(labelsize=8, labelbottom=False)
+        ax.tick_params(labelsize=8)
+        ax.set_xlabel("time relative to now [min]   (line breaks = handover)", fontsize=8)
         ax.grid(alpha=0.3)
         ax.legend(fontsize=7, ncol=4, loc="upper left", title="— GEO (UE motion only)" if s.layer == "GEO" else "— LEO serving   - - GEO", title_fontsize=7)
         ax.set_title("DOPPLER f_d(t) · last 30 min", fontsize=9, loc="left")
-        # kapsama zaman çizelgesi: renk = servis eden uydu, siyah çizgi = handover
-        rgb = np.zeros((len(UES), len(tt), 3))
-        for i in range(len(UES)):
-            for j in range(len(tt)):
-                if s.layer == "LEO":
-                    c = SAT_PAL[srv[j, i] % len(SAT_PAL)] if srv[j, i] >= 0 else COL_NOCOV
-                else:
-                    c = COL_SERVE if not np.isnan(fdG[j, i]) else COL_NOCOV
-                rgb[i, j] = to_rgb(c)
-        axc.imshow(rgb, aspect="auto", interpolation="nearest",
-                   extent=(tt[0] / 60, (tt[-1] + SAMPLE) / 60, len(UES) - 0.5, -0.5))
-        if s.layer == "LEO":
-            for i in range(len(UES)):
-                ho = tt[np.where(np.diff(srv[:, i]) != 0)[0] + 1] / 60
-                axc.vlines(ho, i - 0.5, i + 0.5, color="k", lw=1.2)
-        axc.set_yticks(range(len(UES)))
-        axc.set_yticklabels([u["id"] for u in UES], fontsize=7)
-        axc.tick_params(labelsize=8)
-        axc.set_xlim(-WINDOW / 60, 0)
-        axc.set_xlabel("time relative to now [min]   (coverage: colour = serving SAT, | = handover)", fontsize=8)
+
 
     # --- sağ panel: tablolar
     def draw_info(self, cur):
@@ -560,9 +545,22 @@ class App:
             ("RTT", [f"{l['rtt']:.1f} ms" if l else na for l in L]),
             ("link", ["LOS" if l else "no cov." for l in L]),
         ]
+        # TR 38.821 link budget (Set-1, el cihazı S-band / VSAT Ka-band, yeniden kullanım 1)
+        band = "S" if abs(s.fc - 2.0) < 1e-6 else ("Ka" if abs(s.fc - 20.0) < 1e-6 else None)
+        if N3 is not None:
+            if band is None:
+                lb = [None] * len(UES)
+            elif s.layer == "GEO":
+                lb = [N3.link_budget("GEO", band, "DL", max(l["el"], 1.0)) if l else None for l in L]
+            else:
+                orb = "LEO-600" if s.h_leo < 900 else "LEO-1200"
+                lb = [N3.link_budget(orb, band, "DL", max(l["el"], 1.0), h_km=s.h_leo) if l else None for l in L]
+            nb = "n/a (2/20 GHz)" if band is None else na
+            rows += [("CNR DL", [f"{x['cnr']:.1f} dB" if x else nb for x in lb]),
+                     ("SE DL", [f"{x['se']:.2f} b/s/Hz" if x else nb for x in lb])]
         ax.text(0, 1.0, f"PER-UE LINK VALUES  ({s.layer})", fontsize=10, fontweight="bold", va="top", transform=ax.transAxes)
         tb = ax.table(cellText=[r[1] for r in rows], rowLabels=[r[0] for r in rows], colLabels=[u["id"] for u in UES],
-                      bbox=[0.16, 0.55, 0.84, 0.42], cellLoc="center")
+                      bbox=[0.19, 0.53, 0.81, 0.44], cellLoc="center")
         tb.auto_set_font_size(False)
         tb.set_fontsize(8)
         for j, u in enumerate(UES):
@@ -645,7 +643,7 @@ class App:
         y -= 0.03
         if geo_only:
             return
-        ev = s.events[:6]
+        ev = s.events[:5]
         ax.text(0, y, "\n".join(f"{fmt_t(e[0])} · {e[1]:<4} {sat_name(e[2])} → {sat_name(e[3])}" for e in ev)
                 or "no handover events yet", fontsize=8, family="monospace", va="top", transform=ax.transAxes)
 
