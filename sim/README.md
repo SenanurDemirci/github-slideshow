@@ -2,6 +2,22 @@
 
 `leo_geo_doppler.py` — Python sürümü (numpy + matplotlib).
 `leo_geo_doppler_colab.ipynb` — Google Colab notebook'u (kod içine gömülü, tek dosya yeterli).
+`matlab/` — MATLAB sürümü (`leo_geo_doppler_sim.m`, `coverage_analysis.m`).
+
+## MATLAB'da çalıştırma
+
+İki dosyayı (`leo_geo_doppler_sim.m`, `coverage_analysis.m`) aynı klasöre koyun, MATLAB'da o klasöre geçin:
+
+```matlab
+leo_geo_doppler_sim                                   % etkileşimli pencere (kaydırıcılar + butonlar)
+leo_geo_doppler_sim('Layer','GEO')                    % sadece GEO
+leo_geo_doppler_sim('Layer','LEO','Fc',20,'NSat',10)  % Ka-band, 10 uydu (kapsama boşlukları)
+leo_geo_doppler_sim('SavePng','ekran.png','T',120)    % t = 120 s anındaki tek kare
+leo_geo_doppler_sim('SaveGif','sim.gif','Frames',60,'StepS',20)   % animasyonu GIF olarak kaydet
+coverage_analysis(600, 10, 12)                        % kapsama analizi: irtifa, min elevasyon, uydu sayısı
+```
+
+Ek toolbox gerekmez (MATLAB R2016b+). GNU Octave 6+ ile de çalışır.
 
 ## Google Colab'da çalıştırma
 
