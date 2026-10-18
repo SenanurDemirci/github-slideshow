@@ -776,6 +776,90 @@ def coverage_figure(h_leo=600, el_min=10, n_sat=12, dpi=80, **_ignored):
     return fig
 
 
+def coverage_timeline(n_sat=12, h_leo=600, el_min=10, hours=2.0, dt=2.0):
+    """Yerde sabit bir kullanıcı (görünümün ortası, φ = 0) için en iyi uydunun elevasyonu.
+    Dönüş: t [s], en yüksek elevasyon [derece], kapsama var mı (bool), boşluk aralıkları [(başlangıç, bitiş)]."""
+    s = make_sim(n_sat=n_sat, h_leo=h_leo, el_min=el_min)
+    t = np.arange(0, hours * 3600 + dt, dt)
+    th = np.array([s.sat_theta(k, t) for k in range(n_sat)])          # N × T
+    r = s.r_leo
+    dx, dy = r * np.sin(th), r * np.cos(th) - RE                       # UE (0, R_E) → uydu
+    el = np.degrees(np.arcsin(dy / np.hypot(dx, dy))).max(axis=0)
+    cov = el >= el_min
+    edges = np.diff(np.r_[1, cov.astype(int), 1])
+    gaps = [(t[a], t[b - 1]) for a, b in zip(np.where(edges == -1)[0], np.where(edges == 1)[0])]
+    return t, el, cov, gaps
+
+
+def first_gap_time(n_sat=10, h_leo=600, el_min=10):
+    """İlk kapsama boşluğunun orta anı [s] (boşluk yoksa None)."""
+    _, _, _, gaps = coverage_timeline(n_sat, h_leo, el_min, hours=1.0, dt=1.0)
+    return None if not gaps else 0.5 * (gaps[0][0] + gaps[0][1])
+
+
+def coverage_gap_figure(n_list=(12, 10, 8), h_leo=600, el_min=10, hours=2.0, dpi=80, **_ignored):
+    """Eksik takımyıldızda kapsama boşlukları (non-contiguous coverage).
+    Teori (tek düzlem, tepe geçişi):  kapsama oranı = N·2λ / 2π,
+    boşluk süresi = (2π/N − 2λ) / ω,  boşluklar arası süre = T / N."""
+    r = RE + h_leo
+    w = np.sqrt(MU / r ** 3)
+    lam = footprint(r, el_min)
+    n_min = int(np.floor(np.pi / lam)) + 1
+    fig, axs = plt.subplots(len(n_list) + 1, 1, figsize=(15, 3.0 * len(n_list) + 3.2), dpi=dpi,
+                            gridspec_kw=dict(height_ratios=[1] * len(n_list) + [1.05]))
+    rows = []
+    for ax, n in zip(axs, n_list):
+        t, el, cov, gaps = coverage_timeline(n, h_leo, el_min, hours)
+        tm = t / 60
+        ax.plot(tm, np.maximum(el, -5), color=COL_SERVE, lw=1.6)
+        ax.axhline(el_min, color="k", ls=":", lw=1)
+        for a, b in gaps:
+            ax.axvspan(a / 60, b / 60, color=COL_SET, alpha=0.25, lw=0)
+        if gaps:
+            a, b = gaps[0]
+            ax.annotate(f"gap {b - a:.0f} s\n(predictable from ephemeris)", ((a + b) / 120, el_min - 3),
+                        (a / 60 + 6, 55), fontsize=8, color=COL_SET, arrowprops=dict(arrowstyle="->", color=COL_SET))
+        avail = 100 * cov.mean()
+        gap_s = np.mean([b - a for a, b in gaps]) if gaps else 0.0
+        th_avail = min(100.0, 100 * n * 2 * lam / (2 * np.pi))
+        th_gap = max(0.0, (2 * np.pi / n - 2 * lam) / w)
+        rows.append((n, th_avail, avail, th_gap, gap_s, 2 * np.pi / w / 60 / n, len(gaps)))
+        ok = n >= n_min
+        ax.set_title(f"N = {n} satellites/plane  →  " + (f"continuous coverage (N ≥ N_min = {n_min})" if ok else
+                     f"COVERAGE GAPS: available {avail:.0f}% of time, {len(gaps)} gaps of ~{gap_s:.0f} s in {hours:g} h"),
+                     loc="left", fontsize=10, color=COL_RISE if ok else COL_SET)
+        ax.set_ylim(-5, 92)
+        ax.set_xlim(0, hours * 60)
+        ax.set_ylabel("best elevation [°]", fontsize=8)
+        ax.grid(alpha=0.3)
+        ax.tick_params(labelsize=8)
+    axs[len(n_list) - 1].set_xlabel(f"time [min]   (ground UE, LEO {h_leo:.0f} km, ε_min = {el_min:g}°, "
+                                    f"dotted line = ε_min, red = no satellite above ε_min)", fontsize=8)
+    ax = axs[-1]
+    ax.axis("off")
+    cells = [[f"{n}", f"{ta:.1f}%", f"{a:.1f}%", f"{tg:.0f} s", f"{g:.0f} s", f"{p:.1f} min", f"{k}"]
+             for n, ta, a, tg, g, p, k in rows]
+    tb = ax.table(cellText=cells, colLabels=["N / plane", "availability\n(theory)", "availability\n(simulated)",
+                                             "gap length\n(theory)", "gap length\n(simulated)",
+                                             "gap every\nT / N", f"gaps in\n{hours:g} h"],
+                  bbox=[0.0, 0.25, 0.62, 0.72], cellLoc="center")
+    tb.auto_set_font_size(False)
+    tb.set_fontsize(9)
+    ax.text(0.65, 0.95,
+            f"λ = arccos(R_E·cos ε / r) − ε = {lam / D:.2f}°   →   N_min = ⌊π/λ⌋ + 1 = {n_min}\n"
+            f"availability = N·2λ / 2π\n"
+            f"gap length = (2π/N − 2λ) / ω,   ω = √(μ/r³)\n"
+            f"gaps repeat every T / N  (T = {2 * np.pi / w / 60:.1f} min)\n\n"
+            "3GPP response (Rel-17/18, discontinuous coverage):\n"
+            "• network broadcasts ephemeris of the next satellite\n"
+            "• UE predicts the gap and skips cell search (saves battery)\n"
+            "• UE reports unavailability so the core does not page it",
+            fontsize=9, va="top", transform=ax.transAxes, family="monospace")
+    fig.suptitle("Non-contiguous coverage: what happens when the constellation is incomplete", fontsize=12)
+    fig.tight_layout(rect=(0, 0, 1, 0.97))
+    return fig
+
+
 def snapshot(t=0.0, dpi=80, **params):
     """t [s] anındaki tek kareyi çizer ve figürü döndürür (notebook'ta gösterilir)."""
     sim = make_sim(**params)
