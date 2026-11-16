@@ -1,6 +1,6 @@
 # NTN simülasyon slaytları
 
-`NTN_Simulation_LEO_GEO.pptx`: 17 LEO karesi (t = 0–480 s, 30 s aralık, 4 handover), 1 GEO karesi,
+`NTN_Simulation_LEO_GEO.pptx`: 17 LEO karesi (t = 0–480 s, 30 s aralık, 4 handover), 1 GEO karesi, Doppler zaman grafiği,
 LEO vs GEO karşılaştırması, formüller ve kaynaklar. Sol taraf simülasyon görüntüsü, sağ taraf düzenlenebilir metin.
 
 Yeniden üretmek için:

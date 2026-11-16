@@ -126,14 +126,14 @@ function frameSlide(f) {
           : "3GPP TR 38.811/38.821 · f_c = 2 GHz · h = 35 786 km · Earth-fixed · GEO at +35° · ε_min = 10°");
   // simülasyon görüntüsü
   slide.addImage({ path: path.join(FR, f.image), x: 0.37, y: 1.37, w: 12.3, h: 8.45, objectName: "simulation view",
-    altText: `${f.layer} simulation at t = ${f.t} s: side view, orbit view and Doppler history` });
+    altText: `${f.layer} simulation at t = ${f.t} s: side view of satellites, UEs and links` });
   slide.addShape(pres.shapes.RECTANGLE, { x: 0.37, y: 1.37, w: 12.3, h: 8.45, fill: { type: "none" },
     line: { color: HEX.line, width: 0.75 }, objectName: "image frame" });
   const servTxt = isLeo ? `serving: ${f.serving.join(", ")}` : "GEO serving all UEs";
   slide.addText(`${servTxt} · PL ${f.rows.PL.join(" / ")} (UAV / A/C / HST / SHIP)`,
     { x: 0.37, y: 9.92, w: 7.3, h: 0.85, fontSize: 12, fontFace: MONO, color: HEX.muted, valign: "top", margin: 0,
       isTextBox: true, objectName: "caption left" });
-  slide.addText("Altitude axis logarithmic · angles, ranges & Doppler from true geometry · ground strip = Doppler seen by a fixed ground terminal",
+  slide.addText("Side view · altitude axis logarithmic · angles, ranges & Doppler from true geometry · ground strip = Doppler seen by a fixed ground terminal",
     { x: 7.9, y: 9.92, w: 4.77, h: 0.85, fontSize: 12, color: HEX.muted, valign: "top", margin: 0,
       isTextBox: true, objectName: "caption right" });
   // sağ panel
@@ -171,6 +171,29 @@ pres.addSection({ title: "LEO access link (frames)" });
 frames.filter((f) => f.layer === "LEO").forEach(frameSlide);
 pres.addSection({ title: "GEO access link" });
 frames.filter((f) => f.layer === "GEO").forEach(frameSlide);
+
+// --- Doppler zaman grafiği
+pres.addSection({ title: "Doppler over time" });
+{
+  const s = pres.addSlide({ masterName: "TEXT", sectionTitle: "Doppler over time" });
+  s.addText("Doppler over Time — LEO vs GEO", { placeholder: "title" });
+  s.addText("f_c = 2 GHz · same UEs as the frames · LEO: last 30 min up to t = 480 s · GEO: same scale", { placeholder: "subtitle" });
+  s.addImage({ path: path.join(FR, "doppler.png"), x: 0.37, y: 1.37, w: 12.3, h: 8.45, objectName: "doppler chart",
+    altText: "Doppler shift over 30 minutes for four UEs: LEO S-curves between +46 and -46 kHz with handover jumps; GEO almost flat near 0" });
+  s.addShape(pres.shapes.RECTANGLE, { x: 0.37, y: 1.37, w: 12.3, h: 8.45, fill: { type: "none" }, line: { color: HEX.line, width: 0.75 }, objectName: "image frame" });
+  const stat = (y, big, color, label, name) => {
+    s.addShape(pres.shapes.RECTANGLE, { x: 12.95, y, w: 6.68, h: 1.95, fill: { color: HEX.white }, line: { color: HEX.line, width: 0.75 }, objectName: name + " card" });
+    s.addText(big, { x: 13.2, y: y + 0.18, w: 6.2, h: 0.85, fontSize: 40, fontFace: MONO, bold: true, color, margin: 0, valign: "middle", isTextBox: true, objectName: name + " value" });
+    s.addText(label, { x: 13.2, y: y + 1.05, w: 6.2, h: 0.8, fontSize: 15, color: HEX.ink, margin: 0, valign: "top", isTextBox: true, objectName: name + " label" });
+  };
+  stat(1.37, "±46 kHz", HEX.red, "LEO max Doppler (3GPP: 24 ppm = 48 kHz) — 1.5–3× the 15/30 kHz NR subcarrier spacing", "LEO doppler");
+  stat(3.47, "≈ 580 Hz/s", HEX.red, "LEO Doppler rate when the satellite is overhead (f_d = 0 but changing fastest)", "LEO rate");
+  stat(5.57, "≈ 8 min", HEX.gold, "one S-curve per satellite pass; the jump at the end is the handover to the next satellite", "LEO pass");
+  stat(7.67, "≤ 1.7 kHz", HEX.green, "GEO: satellite fixed in the sky → Doppler only from UE motion (aircraft), no handover", "GEO doppler");
+  s.addText("Why it matters: the UE must pre-compensate this Doppler (GNSS position + satellite ephemeris, Rel-17) before it transmits.",
+    { x: 0.37, y: 9.95, w: 19.26, h: 0.7, fontSize: 15, italic: true, color: HEX.ink, valign: "top", margin: 0, isTextBox: true, objectName: "key message" });
+  s.addNotes("Each LEO pass draws an S-curve: +46 kHz while the satellite rises and approaches, 0 when it is overhead (where it changes fastest, about 580 Hz/s), -46 kHz while it sets. The dotted jump is a handover to the next satellite, about every 8 minutes per UE. On the same scale, GEO is flat: only the UE's own motion creates Doppler (at most 1.7 kHz for the aircraft). The UE pre-compensates the LEO Doppler using its GNSS position and the satellite ephemeris (3GPP Rel-17).");
+}
 
 // --- karşılaştırma
 pres.addSection({ title: "LEO vs GEO" });

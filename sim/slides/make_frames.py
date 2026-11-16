@@ -13,12 +13,11 @@ def render(sim, path):
     app = m.App(sim, interactive=False)
     fig = app.fig
     fig.set_size_inches(W, H)
-    app.ax_info.remove()
+    for ax in (app.ax_info, app.ax_orbit, app.ax_dop):      # sadece yandan görünüm
+        ax.remove()
     cur = sim.current()
-    app.draw_local(cur); app.draw_orbit(cur); app.draw_doppler()
-    app.ax_local.set_position([0.065, 0.475, 0.925, 0.475])
-    app.ax_orbit.set_position([0.02, 0.05, 0.37, 0.33])
-    app.ax_dop.set_position([0.465, 0.075, 0.525, 0.30])
+    app.draw_local(cur)
+    app.ax_local.set_position([0.07, 0.075, 0.915, 0.875])
     fig.savefig(path, dpi=DPI, facecolor="white")
     matplotlib.pyplot.close(fig)
     return cur
@@ -108,6 +107,47 @@ g.advance(120)
 cur = render(g, os.path.join(OUT, "geo_01.png"))
 frames.append(dict(layer="GEO", t=120, idx=1, n=1, image="geo_01.png", status="NO HANDOVER (GEO)", kind="idle",
                    ho_detail="", **values(g, cur)))
+# Doppler zaman grafiği: LEO (t = 480 s'ye kadar son 30 dk) ve GEO, aynı ölçek
+import matplotlib.pyplot as plt
+def series(s):
+    tt = np.array([h[0] for h in s.hist]) - s.t
+    fdL = np.array([[r[0] for r in h[1]] for h in s.hist])
+    srv = np.array([[r[1] for r in h[1]] for h in s.hist])
+    fdG = np.array([[r[2] for r in h[1]] for h in s.hist])
+    return tt / 60, fdL / 1e3, srv, fdG / 1e3
+fig, (a, b) = plt.subplots(2, 1, figsize=(W, H), sharex=True, gridspec_kw=dict(height_ratios=[2.3, 1], hspace=0.28))
+tm, fdL, srv, _ = series(sim)
+for i, u in enumerate(m.UES):
+    y = fdL[:, i].copy(); y[1:][np.diff(srv[:, i]) != 0] = np.nan
+    a.plot(tm, y, color=u["color"], lw=2.2, label=u["name"])
+# açıklamalar: UAV'nin pencerenin ortasındaki tam bir geçişi
+i = 0
+br = np.where(np.diff(srv[:, i]) != 0)[0] + 1
+segs = [(lo, hi) for lo, hi in zip(br[:-1], br[1:]) if tm[lo] > -27 and tm[hi - 1] < -3]
+lo, hi = segs[len(segs) // 2]
+seg = fdL[lo:hi, i]; ts = tm[lo:hi]
+k0 = lo + int(np.argmax(seg)); k1 = lo + int(np.argmin(seg)); kz = lo + int(np.argmin(np.abs(seg)))
+akw = dict(fontsize=12, arrowprops=dict(arrowstyle="->", color="0.25", lw=1.2), bbox=dict(fc="white", ec="0.8", pad=3))
+a.annotate("satellite rising (approaching)\nf_d ≈ +46 kHz", (tm[k0], fdL[k0, i]), (tm[k0] - 7.5, 33), **akw)
+a.annotate("satellite overhead: f_d = 0\nchanges fastest (≈ −580 Hz/s)", (tm[kz], 0), (tm[kz] + 1.0, 22), **akw)
+a.annotate("satellite setting (receding)\nf_d ≈ −46 kHz", (tm[k1], fdL[k1, i]), (tm[k1] - 9.5, -36), **akw)
+a.plot([tm[hi - 1], tm[hi]], [fdL[hi - 1, i], fdL[hi, i]], ":", color=m.UES[i]["color"], lw=2.2)
+a.annotate("handover: UAV jumps from the setting\nto the next (rising) satellite", (0.5 * (tm[hi - 1] + tm[hi]), 0.5 * (fdL[hi - 1, i] + fdL[hi, i])),
+           (tm[hi] + 1.2, -24), **akw)
+a.axhline(0, color="0.5", lw=0.8)
+a.set_ylim(-55, 55); a.set_ylabel("f_d [kHz]", fontsize=12)
+a.set_title("LEO-600 · 2 GHz · Doppler seen by each UE (last 30 min) — one S-curve per satellite pass", loc="left", fontsize=13)
+a.legend(fontsize=11, ncol=4, loc="upper right"); a.grid(alpha=0.3); a.tick_params(labelsize=11)
+tg, _, _, fdG = series(g)
+for i, u in enumerate(m.UES):
+    b.plot(tg, fdG[:, i], color=u["color"], lw=2.2, label=u["name"])
+b.axhline(0, color="0.5", lw=0.8)
+b.set_ylim(-55, 55); b.set_ylabel("f_d [kHz]", fontsize=12)
+b.set_title("GEO · 2 GHz · same scale — Doppler only from UE motion (−0.2 … +1.1 kHz), no handover", loc="left", fontsize=13)
+b.set_xlabel("time relative to now [min]", fontsize=12); b.grid(alpha=0.3); b.tick_params(labelsize=11)
+b.set_xlim(-30, 0)
+fig.subplots_adjust(left=0.07, right=0.985, top=0.95, bottom=0.08)
+fig.savefig(os.path.join(OUT, "doppler.png"), dpi=DPI, facecolor="white"); plt.close(fig)
 json.dump(frames, open(os.path.join(OUT, "frames.json"), "w"), ensure_ascii=False, indent=1)
 for f in frames:
     print(f["layer"], f["t"], f["status"], f["ho_detail"], "| serving", f["serving"], "| ho", f["ho"])
